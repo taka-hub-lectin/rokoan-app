@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!-- ============================================================
+     新機能のひな型（_template.html）
+     使い方：
+       1. このファイルを複製して、例 outsourcing.html にリネーム
+       2. <title> と見出しを変える
+       3. 中身（main）を作る。データの保存は Store だけを使う
+       4. index.html の MODULES に1行追加して登録
+     ※ Store.set / Store.get の中身は shared/store.js が面倒を見るので、
+       将来「家族で共有」に切り替えても、この画面は直さなくてOK。
+     ============================================================ -->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>新機能のひな型</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<style>
+  header{position:sticky;top:0;background:var(--blue);color:#fff;
+    padding:14px 16px;box-shadow:0 2px 10px rgba(46,106,153,.25);
+    display:flex;align-items:center;gap:12px;}
+  .back{color:#fff;text-decoration:none;font-size:22px;font-weight:700;}
+  .title{font-size:19px;font-weight:700;}
+  main{max-width:680px;margin:0 auto;padding:16px 14px 40px;}
+  .card{background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+  input,button{font-family:var(--font);font-size:16px;}
+  input{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:10px;}
+  button{margin-top:10px;width:100%;padding:13px;border:none;border-radius:10px;
+    background:var(--blue);color:#fff;font-weight:700;}
+  .note{font-size:13px;color:var(--muted);margin-top:8px;}
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="index.html">‹</a>
+  <div class="title">新機能のひな型</div>
+</header>
+<main>
+  <div class="card">
+    <input id="memo" placeholder="ここに書いて保存ボタン">
+    <button id="saveBtn">保存</button>
+    <div class="note" id="status">―</div>
+  </div>
+</main>
+
+<script src="shared/store.js"></script>
+<script>
+  // 保存窓口 Store を使うだけ。裏側(端末内 or 家族共有)は意識しなくてよい。
+  const KEY = "template:memo";   // 機能名:項目 で名前を付けると衝突しない
+  const memo = document.getElementById("memo");
+  const status = document.getElementById("status");
+
+  async function load(){
+    const v = await Store.get(KEY);
+    if(v){ memo.value = v; status.textContent = "保存済みを読み込みました"; }
+  }
+  document.getElementById("saveBtn").addEventListener("click", async () => {
+    await Store.set(KEY, memo.value);
+    status.textContent = "保存しました（" + new Date().toLocaleString("ja-JP") + "）";
+  });
+  load();
+</script>
+</body>
+</html>

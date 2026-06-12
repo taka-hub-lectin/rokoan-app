@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ロコ庵ハブ">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAEbUlEQVR4nO3d23UbRxBF0QaXwzITkIMxQ6GDMROg86K/wEWNCGDeXX21dwBQ18xRqckP4dKK+PH6/tH7DGzz9vJ86X2GbgcQcL4egZ/6B4r493VW3If/ISJm6si4D/tgIfPIEWHv/oFCZqk9w37a64NaEzPr7NnNLn8zhMxetm7rzRtazOxpa0+bghYzR9jS1ar1LmTOsvQKsnhDi5kzLe1tUdBipocl3c0OWsz0NLe/XX8PDb3NCtp2poI5HT4MWsxU8qjHu0GLmYrudekOTZSbQdvOVHarz2+DFjMj+K5TVw6i/BK07cxIpr3a0ET5KWjbmRF97daGJoqgifIZtOsGI7v2a0MTRdBEubTmukEOG5oogiaKoIny5P5MEhuaKIImiqCJ8kfvA2zx799/9j7Cp7/++W/zZ6TN08NlxB8KK734qTUhpM3T01BBV37xU3NCSJungmHu0CO9/NYenzdtniqGCHqUhzl169xp81RSPugRHuI90/OnzVNN+aBhidJBV98Gc13nSJunotJBw1Jlg668BdYwzznKBg1rCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKGWDHuWbS+cyzznKBg1rlA666hZY6jpH2jwVlQ4aliofdOVtMMf0/GnzVFM+6NbqP8Rbbp07bZ5Khgi6tTEe5lePzps2TxWXH6/vH70PsVTVbzFtbd2LT5unpyGDvqoUwh4vPm2eHoYMutKLn7Kh+xoq6MovfmpOCGnzVDDMD4UjvfzWHp83bZ4qhgh6lIc5devcafNUUj7oER7iPdPzp81TTfmgYYnSQVffBnNd50ibp6LSQcNSZYOuvAXWMM85ygYNawiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImiiCJoqgiSJoogiaKIImiqCJImiiCJoogiaKoIkiaKIImihlgx7lm0vnMs85ygYNa5QOuuoWWOo6R9o8FZUOGpYqH3TlbTDH9Pxp81RTPujW6j/EW26dO22eSoYIurUxHuZXj86bNk8Vlx+v7x+9D7FU1W8xbW3di0+bp6chg76qFMIeLz5tnh6GDhqmhrlDwxyCJoqgifL09vJ86X0I2IsNTRRBE0XQRHlqrTX3aBK8vTxfbGiiCJoon0G7djCya782NFEETZSfgnbtYERfu7WhifJL0LY0I5n2akMT5dugbWlG8F2nNze0qKnsVp+uHES5G7QtTUX3uny4oUVNJY96nHXlEDUVzOnQHZoos4O2pelpbn+LNrSo6WFJd4uvHKLmTEt72xSn/xePo6xdnJt+KLStOcKWrjb/lkPU7GlrT7vG6ArCWnstxl1/D21bs8ae3RwWoG3NI0cswMM3qrCZOvJf8lOvCOL+fZ11He125xV3vh4/U/0PQSlyQvOZZewAAAAASUVORK5CYII=">
+<title>ロコ庵 運営ハブ</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<style>
+  header{
+    position:sticky;top:0;z-index:10;background:var(--blue);color:#fff;
+    padding:18px 18px calc(16px + env(safe-area-inset-bottom,0)) 18px;
+    box-shadow:0 2px 10px rgba(46,106,153,.25);
+  }
+  .h-title{font-size:21px;font-weight:700;letter-spacing:.02em;}
+  .h-sub{font-size:13px;opacity:.92;margin-top:3px;}
+  main{max-width:680px;margin:0 auto;padding:16px 12px 40px;}
+  .grid{display:grid;grid-template-columns:1fr;gap:12px;}
+  @media(min-width:520px){.grid{grid-template-columns:1fr 1fr;}}
+  .card{
+    display:flex;align-items:center;gap:14px;text-decoration:none;color:inherit;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 16px;min-height:84px;box-shadow:0 1px 3px rgba(34,48,60,.05);
+    transition:transform .12s, box-shadow .12s;
+  }
+  .card:active{transform:scale(.99);}
+  .ico{
+    flex:none;width:52px;height:52px;border-radius:14px;background:#EAF2F9;
+    display:flex;align-items:center;justify-content:center;font-size:26px;
+  }
+  .c-body{flex:1;min-width:0;}
+  .c-title{font-size:17px;font-weight:700;}
+  .c-desc{font-size:13px;color:var(--muted);margin-top:3px;line-height:1.4;}
+  .arrow{flex:none;color:var(--blue);font-size:20px;font-weight:700;}
+  .card.soon{opacity:.55;pointer-events:none;border-style:dashed;}
+  .card.soon .ico{background:#EEF1F4;}
+  .badge{font-size:11px;font-weight:700;color:var(--muted);
+    border:1px solid var(--line);border-radius:99px;padding:2px 8px;}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:20px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="h-title">ロコ庵 運営ハブ</div>
+  <div class="h-sub">機能はここから。今後ここに増えていきます</div>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+<footer>新しい機能を足すときは README.md を参照</footer>
+
+<script>
+// ===== 機能の登録表（ここに1行足す＝機能が1つ増える）=====
+const MODULES = [
+  { name:"清掃チェック", desc:"退室後の掃除チェックリスト", icon:"🧹", url:"cleaning.html", ready:true },
+  // 例) { name:"外注管理", desc:"業者一覧・依頼の管理", icon:"🛠️", url:"outsourcing.html", ready:true },
+  { name:"（今後追加）", desc:"_template.html を複製してここに登録", icon:"➕", url:"#", ready:false },
+];
+
+const grid = document.getElementById("grid");
+MODULES.forEach(m => {
+  const a = document.createElement("a");
+  a.className = "card" + (m.ready ? "" : " soon");
+  a.href = m.ready ? m.url : "#";
+  a.innerHTML = `
+    <div class="ico">${m.icon}</div>
+    <div class="c-body">
+      <div class="c-title">${m.name}</div>
+      <div class="c-desc">${m.desc}</div>
+    </div>
+    ${m.ready ? '<div class="arrow">›</div>' : '<div class="badge">準備中</div>'}`;
+  grid.appendChild(a);
+});
+</script>
+</body>
+</html>

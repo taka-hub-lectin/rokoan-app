@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>ロコ庵 清掃チェック</title>
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAAE20lEQVR4nO3d21FbQRRE0ZaKsEwCEIwJBQdjEoC88IcNFkLSfczrnJ69PrGRbpW22oMo1z0oiIfn1/fR14AyL0/3h9HXMOwCCNjfiMC7PiERz6tX3M2fhIhxrmXczR6YkLGkRdjVH5CQsVXNsI+1HkgiZuxTs5sq7wxCRi2la1280MSMmkp7KgqamNFCSVe75p2Q0cvWI8jmhSZm9LS1t01BEzNG2NLd6qCJGSOt7a/q59DAaKuCZp0RwZoOF4MmZkSy1OPNoIkZEd3qkjM0rFwNmnVGZNf6vBg0MSODS51y5ICVb0GzzsjkvFcWGla+BM06I6PTblloWCFoWPkMmuMGMvvol4WGFYKGlYPEcQM+WGhYIWhYIWhYOXJ+hhMWGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlYIGlbuRl8A4vn988e3rz3+ehtwJdsRND5dCvn8z6KHzZEDkm7HvOfvjULQ2Bxp5KgJenJ744waNUHDCkFPrHRlI640QcMKQU8q4rrWQNATco1ZIujpOMcsETQKRPytIUFPxH2dJYKeRu2YI66zRNBTmCVmiaDtzRSzRNAwQ9DGZltniaBtzRizRNCWZo1ZImg7M8csETTMELSR2ddZImgbxPwXQRsg5v8IGlYIOjnW+SuCToyYvyPopIj5MoJOiJivI2hYIehkWOfbCDoRYl5G0EkQ8zoEnQAxr0fQsELQwbHO26S9x0rmG9usRczbpQva4cY2axDzPqmOHC43tkE7aYJ2urHNEtZ5vxRBu93Y5hZiLpMi6BKZoibmcuGDrvEiZ4iamOsIH3QtGaJGuWmCluJGzTrXM1XQUryoibmu6YKW4kRNzPWFD7rVizQ6amJuI3zQLY2OGvWlCLrl+oyImnVuJ0XQkk/UxNxWmqCl/FETc3upgpbyR4220gUt5Yyade4jZdBSrqiJuZ+0QUs5oibmvlIHLcV+gYm5v/RBS76/TcR2FkFL8aJmncewCVqKEzUxj2MVtDQ+amIeyy5oaVzUxDyeZdDS+KXGGLZBS32jZp1jsA5a6hM1McdxeHh+fR99ET1kOSoQcxn7hf5AKHOYJugMeNOVmyroyMFEvrZMpgpaihlOxGvKarqgpVgBRboWB1MGLRGSq2mDlsZHPfr5HU0dtDQuKmJuY/qgpf5xEXM7BP1Pr8iIuS2CPkFs+RH0mZZR84Zpj6AvaBEeMfdB0FfUDJCY+yHoGwgxH4JeUBo1b4q+CHqFvVESc38EvdKWOB9/vRHzIHejLyCT00gv/ZcuIh6PoHci3pg4csAKQcMKQcMKQcMKQcMKQcMKQcMKQcMKQcMKQcPK8eXp/jD6IoBaWGhYIWhYIWhYOUoS52g4eHm6P7DQsELQsPIZNMcOZPbRLwsNKwQNK1+C5tiBjE67ZaFh5VvQrDQyOe+VhYaVi0Gz0sjgUqdXF5qoEdm1PjlywMrNoFlpRHSry8WFJmpEstTjqiMHUSOCNR1yhoaV1UGz0hhpbX+bFpqoMcKW7jYfOYgaPW3trSjOh+fX95LvB67ZO5xFPxSy1mihpKviTzmIGjWV9lQ1Ro4g2KvWMFb9HJq1xh41u2kWIGuNJS0GsPmiEjbOtfyXvOsRgbjn1es4OuzMS9z+RvxM9Qc9stZ0I4q2CwAAAABJRU5ErkJggg==">
+<meta name="apple-mobile-web-app-title" content="清掃チェック">
+
+<style>
+  :root{
+    --blue:#4A90C3;
+    --blue-deep:#2E6A99;
+    --ink:#22303C;
+    --muted:#7A8896;
+    --line:#E3E9EF;
+    --bg:#F4F7FA;
+    --card:#FFFFFF;
+    --done-bg:#EAF6EE;
+    --done-mark:#3Fa05f;
+    --done-ink:#9BB0A4;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    padding-bottom:40px;
+  }
+
+  /* ===== ヘッダー ===== */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:var(--blue);
+    color:#fff;
+    padding:14px 18px calc(14px + env(safe-area-inset-bottom,0)) 18px;
+    box-shadow:0 2px 10px rgba(46,106,153,.25);
+  }
+  .h-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .h-title{font-size:20px;font-weight:700;letter-spacing:.02em;}
+  .h-count{font-size:15px;font-weight:600;opacity:.95;white-space:nowrap;}
+  .h-count b{font-size:22px;}
+  .bar{
+    margin-top:10px;height:10px;border-radius:99px;
+    background:rgba(255,255,255,.30);overflow:hidden;
+  }
+  .bar-fill{
+    height:100%;width:0%;border-radius:99px;
+    background:#fff;transition:width .35s ease;
+  }
+  .h-actions{margin-top:12px;display:flex;gap:10px;}
+  .btn{
+    flex:1;border:none;border-radius:12px;
+    padding:12px 10px;font-size:15px;font-weight:700;
+    font-family:inherit;cursor:pointer;
+  }
+  .btn-reset{background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.55);}
+  .btn-reset:active{background:rgba(255,255,255,.30);}
+
+  /* 全完了バナー */
+  .done-banner{
+    display:none;margin-top:12px;background:#fff;color:var(--blue-deep);
+    border-radius:12px;padding:12px;text-align:center;font-weight:700;font-size:16px;
+  }
+  .done-banner.show{display:block;}
+
+  /* ===== セクション ===== */
+  main{padding:14px 12px 0;max-width:680px;margin:0 auto;}
+  .sec{
+    background:var(--card);border:1px solid var(--line);
+    border-radius:16px;margin-bottom:14px;overflow:hidden;
+    box-shadow:0 1px 3px rgba(34,48,60,.05);
+  }
+  .sec-head{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 16px;border-bottom:1px solid var(--line);
+    background:#FAFCFE;
+  }
+  .sec-no{
+    flex:none;width:34px;height:34px;border-radius:10px;
+    background:var(--blue);color:#fff;font-weight:700;font-size:17px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .sec-name{font-size:18px;font-weight:700;flex:1;}
+  .sec-prog{font-size:14px;font-weight:700;color:var(--muted);white-space:nowrap;}
+  .sec.alldone .sec-head{background:var(--done-bg);}
+  .sec.alldone .sec-no{background:var(--done-mark);}
+  .sec.alldone .sec-prog{color:var(--done-mark);}
+
+  /* ===== チェック項目 ===== */
+  .item{
+    display:flex;align-items:center;gap:14px;
+    padding:15px 16px;min-height:60px;
+    border-top:1px solid #F0F4F8;cursor:pointer;
+    transition:background .15s;
+  }
+  .item:first-child{border-top:none;}
+  .item:active{background:#F2F7FB;}
+  .box{
+    flex:none;width:30px;height:30px;border-radius:9px;
+    border:2.5px solid #C4D2DE;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .15s;
+  }
+  .box svg{width:18px;height:18px;opacity:0;transform:scale(.4);transition:all .15s;}
+  .label{font-size:17px;line-height:1.45;flex:1;}
+  .sub{display:block;font-size:14px;color:var(--muted);margin-top:2px;line-height:1.4;}
+
+  .item.checked .box{background:var(--done-mark);border-color:var(--done-mark);}
+  .item.checked .box svg{opacity:1;transform:scale(1);}
+  .item.checked{background:var(--done-bg);}
+  .item.checked .label{color:var(--done-ink);text-decoration:line-through;text-decoration-thickness:2px;}
+  .item.checked .sub{color:#B7C7BD;}
+
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:18px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-top">
+    <div class="h-title">ロコ庵 清掃チェック</div>
+    <div class="h-count"><b id="doneNum">0</b> / <span id="totalNum">0</span></div>
+  </div>
+  <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+  <div class="h-actions">
+    <button class="btn btn-reset" id="resetBtn">全部リセット（次のお客様用）</button>
+  </div>
+  <div class="done-banner" id="doneBanner">✓ すべて完了しました！おつかれさまでした</div>
+</header>
+
+<main id="list"></main>
+
+<footer>タップでチェック・自動保存されます</footer>
+
+<script>
+// ===== チェック項目データ（手書きリストより） =====
+const SECTIONS = [
+  { no:"①", name:"カードキー回収", items:[] },
+  { no:"②", name:"換気", items:[] },
+  { no:"③", name:"風呂", items:[
+      {t:"窓を全開にする"},
+      {t:"シャワー・洗剤でそうじ", s:"ボトル・洗面器も"},
+      {t:"シャンプー台 → 外で乾燥"},
+      {t:"排水口そうじ → ネット交換"},
+      {t:"残量チェック", s:"シャンプー / トリートメント / ボディソープ / バスマジックリン"},
+  ]},
+  { no:"④", name:"洗面所", items:[
+      {t:"コップを洗う"},
+      {t:"コップ台 → 外で乾燥"},
+      {t:"洗面台を洗う", s:"ハミガキの飛び散り確認・排水口も洗う"},
+      {t:"手洗いソープが出るかチェック"},
+      {t:"タオル回収"},
+      {t:"洗たく機・周辺そうじ"},
+      {t:"残量チェック", s:"アタック / ハミング"},
+  ]},
+  { no:"⑤", name:"台所", items:[
+      {t:"冷蔵庫チェック"},
+      {t:"コップ・鍋の洗浄・汚れチェック"},
+      {t:"IH・流し台そうじ → 排水口ネット交換"},
+      {t:"レンジ・トースター庫内そうじ"},
+      {t:"湯わかしポットの中身チェック"},
+      {t:"コーヒーメーカーそうじ"},
+      {t:"ランチョンマット・テーブルそうじ"},
+  ]},
+  { no:"⑥", name:"トイレ", items:[
+      {t:"便器・床そうじ"},
+      {t:"トイレットペーパー・ナプキン補充"},
+  ]},
+  { no:"⑦", name:"ゴミ出し", items:[
+      {t:"寝室①"},
+      {t:"寝室②"},
+      {t:"リビング"},
+      {t:"トイレの汚物入れ"},
+      {t:"風呂の排水口"},
+      {t:"流しの排水口"},
+      {t:"分別ゴミ箱"},
+  ]},
+  { no:"⑧", name:"灰皿", items:[
+      {t:"そうじして乾燥させる"},
+  ]},
+  { no:"⑨", name:"シーツ交換", items:[
+      {t:"キルトパッドは下の洗たく機で洗い、自然乾燥"},
+      {t:"タオル・シーツ類はランドリーで乾燥までする"},
+  ]},
+  { no:"⑩", name:"食洗器の水を抜く", items:[] },
+];
+
+// ===== ID付与・全件リスト =====
+let allIds = [];
+SECTIONS.forEach((sec, si) => {
+  if (sec.items.length === 0){
+    sec.leaf = [{ id:`s${si}`, t:sec.name }]; // セクション自体が1項目
+    sec.singleton = true;
+  } else {
+    sec.leaf = sec.items.map((it, ii) => ({ id:`s${si}-${ii}`, ...it }));
+  }
+  sec.leaf.forEach(l => allIds.push(l.id));
+});
+
+const STORAGE_KEY = "rokoan-cleaning-checklist";
+let state = {};
+
+// ===== 保存・読み込み（どの環境でも保存できるよう多重化） =====
+async function loadState(){
+  // 1) claude.ai のアーティファクト保存
+  if (window.storage && window.storage.get){
+    try{
+      const r = await window.storage.get(STORAGE_KEY);
+      if (r && r.value){ state = JSON.parse(r.value); return; }
+    }catch(e){}
+  }
+  // 2) iPad等で単体ファイルとして使うとき
+  try{
+    const v = localStorage.getItem(STORAGE_KEY);
+    if (v){ state = JSON.parse(v); return; }
+  }catch(e){}
+  state = {};
+}
+async function saveState(){
+  if (window.storage && window.storage.set){
+    try{ await window.storage.set(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+  }
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+}
+
+// ===== 描画 =====
+const CHECK = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function render(){
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  SECTIONS.forEach((sec) => {
+    const done = sec.leaf.filter(l => state[l.id]).length;
+    const total = sec.leaf.length;
+    const all = done === total;
+
+    const secEl = document.createElement("section");
+    secEl.className = "sec" + (all ? " alldone" : "");
+
+    let html = `<div class="sec-head">
+        <div class="sec-no">${sec.no}</div>
+        <div class="sec-name">${sec.name}</div>
+        <div class="sec-prog">${done}/${total}</div>
+      </div>`;
+
+    sec.leaf.forEach(l => {
+      const checked = !!state[l.id];
+      // singleton はラベルにセクション名が出るので、項目テキストは省く
+      const labelText = sec.singleton ? sec.name : l.t;
+      const subText = l.s ? `<span class="sub">${l.s}</span>` : "";
+      html += `<div class="item${checked?" checked":""}" data-id="${l.id}">
+          <div class="box">${CHECK}</div>
+          <div class="label">${labelText}${subText}</div>
+        </div>`;
+    });
+
+    secEl.innerHTML = html;
+    list.appendChild(secEl);
+  });
+
+  // クリックイベント
+  document.querySelectorAll(".item").forEach(el => {
+    el.addEventListener("click", () => toggle(el.dataset.id));
+  });
+
+  updateProgress();
+}
+
+function toggle(id){
+  state[id] = !state[id];
+  saveState();
+  render();
+}
+
+function updateProgress(){
+  const done = allIds.filter(id => state[id]).length;
+  const total = allIds.length;
+  document.getElementById("doneNum").textContent = done;
+  document.getElementById("totalNum").textContent = total;
+  document.getElementById("barFill").style.width = (total ? (done/total*100) : 0) + "%";
+  document.getElementById("doneBanner").classList.toggle("show", done === total && total > 0);
+}
+
+// ===== リセット =====
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (confirm("チェックを全部消して、次のお客様用にリセットします。よろしいですか？")){
+    state = {};
+    saveState();
+    render();
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+});
+
+// ===== 起動 =====
+(async function init(){
+  await loadState();
+  render();
+})();
+</script>
+</body>
+</html>

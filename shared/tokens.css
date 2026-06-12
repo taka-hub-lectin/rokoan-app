@@ -1,0 +1,21 @@
+/* ============================================================
+   ロコ庵 運営ハブ ― 共通デザイン設定（tokens.css）
+   新しい機能はこの色・フォントを使うと、見た目が自動で揃います。
+   色を変えたいときはここだけ直せば全機能に反映されます。
+   ============================================================ */
+:root{
+  --blue:#4A90C3;
+  --blue-deep:#2E6A99;
+  --ink:#22303C;
+  --muted:#7A8896;
+  --line:#E3E9EF;
+  --bg:#F4F7FA;
+  --card:#FFFFFF;
+  --done:#3FA05F;
+  --done-bg:#EAF6EE;
+  --radius:16px;
+  --font:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);}
