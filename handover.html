@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>引継書｜ロコ庵 運営ハブ</title>
+<!-- フォールバック（tokens.cssが読めない時用）。下のlinkがあれば自動で上書きされます -->
+<style>
+:root{
+  --blue:#4A90C3; --blue-deep:#2E6A99; --ink:#22303C; --muted:#7A8896;
+  --line:#E3E9EF; --bg:#F4F7FA; --card:#FFFFFF; --done:#3FA05F; --done-bg:#EAF6EE;
+  --radius:16px; --font:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);}
+</style>
+<link rel="stylesheet" href="shared/tokens.css">
+<style>
+  .topbar{
+    position:sticky; top:0; z-index:10;
+    background:var(--blue-deep); color:#fff;
+    display:flex; align-items:center; gap:10px;
+    padding:14px 16px; box-shadow:0 2px 8px rgba(0,0,0,.08);
+  }
+  .topbar a.back{
+    color:#fff; text-decoration:none; font-size:15px;
+    display:inline-flex; align-items:center; gap:4px; opacity:.95;
+  }
+  .topbar h1{ font-size:17px; margin:0; font-weight:700; letter-spacing:.02em; }
+
+  .wrap{ max-width:760px; margin:0 auto; padding:18px 14px 40px; }
+
+  .lead{ color:var(--muted); font-size:13px; margin:4px 2px 16px; line-height:1.7; }
+
+  .card{
+    background:var(--card); border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden;
+    box-shadow:0 1px 3px rgba(20,40,60,.05);
+  }
+
+  table{ width:100%; border-collapse:collapse; }
+  thead th{
+    background:var(--blue-deep); color:#fff; font-size:13.5px; font-weight:700;
+    text-align:left; padding:13px 14px;
+  }
+  thead th.c{ text-align:center; }
+  tbody td{
+    padding:13px 14px; font-size:14.5px; border-top:1px solid var(--line);
+    vertical-align:middle; line-height:1.55;
+  }
+  tbody tr:nth-child(even){ background:#EFF4F9; }
+  td.task{ color:var(--ink); }
+  td.main{ text-align:center; font-weight:700; color:var(--blue-deep); white-space:nowrap; }
+  td.sub{ text-align:center; color:var(--ink); font-size:13.5px; }
+  td.sub.none{ color:#B7C0CA; }
+
+  .col-main{ width:24%; }
+  .col-sub{ width:30%; }
+
+  .foot{ color:var(--muted); font-size:12px; margin:14px 4px 0; line-height:1.7; }
+
+  @media (max-width:520px){
+    thead th, tbody td{ padding:11px 9px; }
+    tbody td{ font-size:13.5px; }
+    td.sub{ font-size:12.5px; }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <a class="back" href="index.html">&#8249; ハブ</a>
+    <h1>引継書（役割分担）</h1>
+  </div>
+
+  <div class="wrap">
+    <p class="lead">
+      ロコ庵の業務の担当一覧です。母屋運営ベース。<br>
+      主担当が中心、サブ・補助は必要なときのサポートです。
+    </p>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>業務</th>
+            <th class="c col-main">主担当</th>
+            <th class="c col-sub">サブ・補助</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="task">予約管理（価格調整）</td><td class="main">貴</td><td class="sub none">—</td></tr>
+          <tr><td class="task">ゲスト対応（Airbnbやり取り・チェックイン/アウト案内）</td><td class="main">真奈美</td><td class="sub">陽・貴・眞</td></tr>
+          <tr><td class="task">清掃・リネン交換</td><td class="main">真奈美・陽</td><td class="sub none">—</td></tr>
+          <tr><td class="task">備品・消耗品の補充、買い出し</td><td class="main">真奈美・陽</td><td class="sub none">—</td></tr>
+          <tr><td class="task">設備メンテナンス・修繕（DIY含む）</td><td class="main">貴・眞</td><td class="sub none">—</td></tr>
+          <tr><td class="task">宿泊者名簿の管理</td><td class="main">陽</td><td class="sub">真奈美・貴（総括）</td></tr>
+          <tr><td class="task">法令・行政手続き（届出・定期報告・宿泊税・確定申告）</td><td class="main">貴</td><td class="sub none">—</td></tr>
+          <tr><td class="task">売上・経費・報酬の管理</td><td class="main">貴</td><td class="sub none">—</td></tr>
+          <tr><td class="task">帳簿付け</td><td class="main">陽</td><td class="sub">真奈美</td></tr>
+          <tr><td class="task">リスティング作成・写真・SNS発信</td><td class="main">貴</td><td class="sub none">—</td></tr>
+          <tr><td class="task">システム／スプレッドシート管理</td><td class="main">貴</td><td class="sub none">—</td></tr>
+          <tr><td class="task">離れの改装・開業準備</td><td class="main">全員</td><td class="sub none">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="foot">最終更新：2026/06/13　｜　離れ開業後に見直し予定</p>
+  </div>
+</body>
+</html>
