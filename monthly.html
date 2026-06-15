@@ -69,6 +69,12 @@
   }
   .box svg{width:18px;height:18px;opacity:0;transform:scale(.4);transition:all .15s;}
   .label{font-size:17px;line-height:1.45;flex:1;}
+  .who{
+    display:inline-block;margin-left:8px;vertical-align:middle;
+    font-size:12px;font-weight:700;color:var(--blue-deep);
+    background:#EAF2F9;border:1px solid var(--line);
+    border-radius:99px;padding:2px 9px;
+  }
   .sub{display:block;font-size:14px;color:var(--muted);margin-top:2px;line-height:1.4;}
   .done-date{font-size:12px;color:var(--done);white-space:nowrap;}
 
@@ -109,15 +115,17 @@ const TASKS = [
   {
     name: "県報告",
     icon: "🏛️",
+    evenOnly: true,   // 偶数月のみ
     items: [
-      { id:"report", t:"宿泊実績の報告", s:"毎月15日までに前月分を提出" },
+      { id:"report", t:"宿泊実績の報告", s:"偶数月のみ・前月分（2か月分）を提出" },
     ]
   },
   {
     name: "県税",
     icon: "💰",
     items: [
-      { id:"tax", t:"宿泊税の納付", s:"毎月末までに前月分を納付" },
+      { id:"tax_apply", t:"① 申請", s:"宿泊税の申請", who:"貴" },
+      { id:"tax_pay",   t:"② 支払い", s:"宿泊税の納付", who:"マナミ" },
     ]
   },
   {
@@ -128,6 +136,12 @@ const TASKS = [
     ]
   },
 ];
+
+// その月に表示するセクション（偶数月限定タスクの絞り込み）
+function visibleTasks(){
+  const isEven = (currentMonth + 1) % 2 === 0;
+  return TASKS.filter(sec => !sec.evenOnly || isEven);
+}
 
 // ===== 月の管理 =====
 const now = new Date();
@@ -169,7 +183,7 @@ const CHECK = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 
 
 function allItemIds(){
   const ids = [];
-  TASKS.forEach(sec => sec.items.forEach(it => ids.push(it.id)));
+  visibleTasks().forEach(sec => sec.items.forEach(it => ids.push(it.id)));
   return ids;
 }
 
@@ -178,7 +192,7 @@ function render(){
   const list = document.getElementById("list");
   list.innerHTML = "";
 
-  TASKS.forEach(sec => {
+  visibleTasks().forEach(sec => {
     const done = sec.items.filter(it => state[it.id]).length;
     const total = sec.items.length;
     const all = done === total;
@@ -196,9 +210,10 @@ function render(){
       const checked = !!state[it.id];
       const dateStr = checked ? state[it.id] : "";
       const subText = it.s ? `<span class="sub">${it.s}</span>` : "";
+      const whoBadge = it.who ? `<span class="who">${it.who}</span>` : "";
       html += `<div class="item${checked?" checked":""}" data-id="${it.id}">
           <div class="box">${CHECK}</div>
-          <div class="label">${it.t}${subText}</div>
+          <div class="label">${it.t}${whoBadge}${subText}</div>
           ${checked ? `<div class="done-date">${dateStr}</div>` : ""}
         </div>`;
     });
