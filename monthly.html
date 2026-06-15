@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="定期業務">
+<title>定期業務チェック｜ロコ庵</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<style>
+  header{
+    position:sticky;top:0;z-index:20;
+    background:var(--blue);color:#fff;
+    padding:14px 18px;
+    box-shadow:0 2px 10px rgba(46,106,153,.25);
+  }
+  .h-top{display:flex;align-items:center;gap:10px;}
+  .back{color:#fff;text-decoration:none;font-size:22px;font-weight:700;line-height:1;}
+  .h-title{font-size:20px;font-weight:700;letter-spacing:.02em;}
+  .h-month{margin-top:10px;display:flex;align-items:center;justify-content:center;gap:16px;}
+  .h-month button{
+    background:rgba(255,255,255,.18);color:#fff;border:1.5px solid rgba(255,255,255,.55);
+    border-radius:10px;width:38px;height:38px;font-size:20px;font-weight:700;
+    font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .h-month button:active{background:rgba(255,255,255,.30);}
+  .h-month .month-label{font-size:19px;font-weight:700;min-width:140px;text-align:center;}
+  .h-count{margin-top:8px;text-align:center;font-size:15px;font-weight:600;opacity:.95;}
+  .h-count b{font-size:22px;}
+  .bar{margin-top:8px;height:10px;border-radius:99px;background:rgba(255,255,255,.30);overflow:hidden;}
+  .bar-fill{height:100%;width:0%;border-radius:99px;background:#fff;transition:width .35s ease;}
+  .done-banner{
+    display:none;margin-top:10px;background:#fff;color:var(--blue-deep);
+    border-radius:12px;padding:10px;text-align:center;font-weight:700;font-size:15px;
+  }
+  .done-banner.show{display:block;}
+
+  main{padding:14px 12px 0;max-width:680px;margin:0 auto;}
+
+  .sec{
+    background:var(--card);border:1px solid var(--line);
+    border-radius:16px;margin-bottom:14px;overflow:hidden;
+    box-shadow:0 1px 3px rgba(34,48,60,.05);
+  }
+  .sec-head{
+    display:flex;align-items:center;gap:12px;
+    padding:14px 16px;border-bottom:1px solid var(--line);
+    background:#FAFCFE;
+  }
+  .sec-ico{flex:none;font-size:22px;}
+  .sec-name{font-size:18px;font-weight:700;flex:1;}
+  .sec-prog{font-size:14px;font-weight:700;color:var(--muted);white-space:nowrap;}
+  .sec.alldone .sec-head{background:var(--done-bg);}
+  .sec.alldone .sec-prog{color:var(--done);}
+
+  .item{
+    display:flex;align-items:center;gap:14px;
+    padding:15px 16px;min-height:60px;
+    border-top:1px solid #F0F4F8;cursor:pointer;
+    transition:background .15s;
+  }
+  .item:first-child{border-top:none;}
+  .item:active{background:#F2F7FB;}
+  .box{
+    flex:none;width:30px;height:30px;border-radius:9px;
+    border:2.5px solid #C4D2DE;background:#fff;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .15s;
+  }
+  .box svg{width:18px;height:18px;opacity:0;transform:scale(.4);transition:all .15s;}
+  .label{font-size:17px;line-height:1.45;flex:1;}
+  .sub{display:block;font-size:14px;color:var(--muted);margin-top:2px;line-height:1.4;}
+  .done-date{font-size:12px;color:var(--done);white-space:nowrap;}
+
+  .item.checked .box{background:var(--done);border-color:var(--done);}
+  .item.checked .box svg{opacity:1;transform:scale(1);}
+  .item.checked{background:var(--done-bg);}
+  .item.checked .label{color:#9BB0A4;text-decoration:line-through;text-decoration-thickness:2px;}
+  .item.checked .sub{color:#B7C7BD;}
+
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:18px 14px 40px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-top">
+    <a class="back" href="index.html">‹</a>
+    <div class="h-title">定期業務チェック</div>
+  </div>
+  <div class="h-month">
+    <button id="prevBtn">‹</button>
+    <div class="month-label" id="monthLabel"></div>
+    <button id="nextBtn">›</button>
+  </div>
+  <div class="h-count"><b id="doneNum">0</b> / <span id="totalNum">0</span></div>
+  <div class="bar"><div class="bar-fill" id="barFill"></div></div>
+  <div class="done-banner" id="doneBanner">✓ 今月の定期業務 すべて完了！</div>
+</header>
+
+<main id="list"></main>
+
+<footer>タップでチェック・月ごとに自動保存されます</footer>
+
+<script src="shared/store.js"></script>
+<script>
+// ===== 定期業務の定義 =====
+const TASKS = [
+  {
+    name: "県報告",
+    icon: "🏛️",
+    items: [
+      { id:"report", t:"宿泊実績の報告", s:"毎月15日までに前月分を提出" },
+    ]
+  },
+  {
+    name: "県税",
+    icon: "💰",
+    items: [
+      { id:"tax", t:"宿泊税の納付", s:"毎月末までに前月分を納付" },
+    ]
+  },
+  {
+    name: "帳簿記帳",
+    icon: "📒",
+    items: [
+      { id:"bookkeeping", t:"月次の帳簿記帳", s:"売上・経費を記帳" },
+    ]
+  },
+];
+
+// ===== 月の管理 =====
+const now = new Date();
+let currentYear = now.getFullYear();
+let currentMonth = now.getMonth(); // 0-indexed
+
+function monthKey(){ return `${currentYear}-${String(currentMonth+1).padStart(2,"0")}`; }
+function storagePrefix(){ return `monthly:${monthKey()}`; }
+
+function updateMonthLabel(){
+  document.getElementById("monthLabel").textContent = `${currentYear}年${currentMonth+1}月`;
+}
+
+document.getElementById("prevBtn").addEventListener("click", () => {
+  currentMonth--;
+  if(currentMonth < 0){ currentMonth = 11; currentYear--; }
+  loadAndRender();
+});
+document.getElementById("nextBtn").addEventListener("click", () => {
+  currentMonth++;
+  if(currentMonth > 11){ currentMonth = 0; currentYear++; }
+  loadAndRender();
+});
+
+// ===== 状態管理 =====
+let state = {}; // { "report": "2026-06-13", "tax": null, ... }
+
+async function loadState(){
+  const v = await Store.get(storagePrefix());
+  state = v || {};
+}
+
+async function saveState(){
+  await Store.set(storagePrefix(), state);
+}
+
+// ===== 描画 =====
+const CHECK = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function allItemIds(){
+  const ids = [];
+  TASKS.forEach(sec => sec.items.forEach(it => ids.push(it.id)));
+  return ids;
+}
+
+function render(){
+  updateMonthLabel();
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  TASKS.forEach(sec => {
+    const done = sec.items.filter(it => state[it.id]).length;
+    const total = sec.items.length;
+    const all = done === total;
+
+    const secEl = document.createElement("section");
+    secEl.className = "sec" + (all ? " alldone" : "");
+
+    let html = `<div class="sec-head">
+        <div class="sec-ico">${sec.icon}</div>
+        <div class="sec-name">${sec.name}</div>
+        <div class="sec-prog">${done}/${total}</div>
+      </div>`;
+
+    sec.items.forEach(it => {
+      const checked = !!state[it.id];
+      const dateStr = checked ? state[it.id] : "";
+      const subText = it.s ? `<span class="sub">${it.s}</span>` : "";
+      html += `<div class="item${checked?" checked":""}" data-id="${it.id}">
+          <div class="box">${CHECK}</div>
+          <div class="label">${it.t}${subText}</div>
+          ${checked ? `<div class="done-date">${dateStr}</div>` : ""}
+        </div>`;
+    });
+
+    secEl.innerHTML = html;
+    list.appendChild(secEl);
+  });
+
+  document.querySelectorAll(".item").forEach(el => {
+    el.addEventListener("click", () => toggle(el.dataset.id));
+  });
+
+  updateProgress();
+}
+
+function toggle(id){
+  if(state[id]){
+    delete state[id];
+  } else {
+    const d = new Date();
+    state[id] = `${d.getMonth()+1}/${d.getDate()}`;
+  }
+  saveState();
+  render();
+}
+
+function updateProgress(){
+  const ids = allItemIds();
+  const done = ids.filter(id => state[id]).length;
+  const total = ids.length;
+  document.getElementById("doneNum").textContent = done;
+  document.getElementById("totalNum").textContent = total;
+  document.getElementById("barFill").style.width = (total ? (done/total*100) : 0) + "%";
+  document.getElementById("doneBanner").classList.toggle("show", done === total && total > 0);
+}
+
+async function loadAndRender(){
+  await loadState();
+  render();
+}
+
+// ===== 起動 =====
+loadAndRender();
+</script>
+</body>
+</html>
