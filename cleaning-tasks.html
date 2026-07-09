@@ -140,10 +140,17 @@
 
   function renderHome(){
     var el=document.getElementById("home");
-    if(!tasks.length){ el.innerHTML='<div class="empty">今の担当はありません。<br>新しい予約が入ると自動で表示されます。</div>'; return; }
-    var todo=tasks.filter(function(t){return t.status!=="報告済"&&t.status!=="承認";});
+    var poll=tasks.filter(function(t){return t.poll||t.status==="打診中";});
+    var todo=tasks.filter(function(t){return !(t.poll||t.status==="打診中")&&t.status!=="報告済"&&t.status!=="承認";});
     var doneList=tasks.filter(function(t){return t.status==="報告済"||t.status==="承認";});
+    if(!poll.length&&!todo.length&&!doneList.length){
+      el.innerHTML='<div class="empty">今の担当はありません。<br>新しい予約が入ると自動で表示されます。</div>'; return;
+    }
     var h="";
+    if(poll.length){
+      h+='<div class="sec-label">空き確認（〇×で回答してください）</div>';
+      poll.forEach(function(t){ h+=pollCard(t); });
+    }
     h+='<div class="sec-label">やること（'+todo.length+'）</div>';
     todo.forEach(function(t){ h+=taskCard(t); });
     if(!todo.length) h+='<div class="empty">未対応はありません。おつかれさまです。</div>';
@@ -161,6 +168,33 @@
     return '<div class="card"><div class="task" onclick="openTask(\''+t.id+'\')">'
       +'<div class="task-top"><span class="task-fac">'+t.facility+'</span>'+pill+'</div>'
       +'<div class="task-meta">'+fmtDate(t.date)+' チェックアウト後の清掃</div>'+warn+'</div></div>';
+  }
+
+  // 打診中カード：〇（いける）/×（むり）で回答。回答済みは色で示し、変更も可。
+  function pollCard(t){
+    var a=t.myAnswer||"";
+    var warn=t.sameDayIn?'<div class="task-warn">⚠ 当日チェックインあり・時間厳守</div>':'';
+    var okStyle=(a==="o")?"background:#3FA05F;color:#fff":"background:#EAF6EE;color:#3FA05F";
+    var ngStyle=(a==="x")?"background:#C0392B;color:#fff":"background:#FDECEC;color:#C0392B";
+    return '<div class="card"><div class="task" style="cursor:default">'
+      +'<div class="task-top"><span class="task-fac">'+t.facility+'</span>'
+      +'<span class="pill pill-todo">空き確認</span></div>'
+      +'<div class="task-meta">'+fmtDate(t.date)+' の清掃</div>'+warn
+      +'<div style="display:flex;gap:10px;margin-top:12px">'
+      +'<button class="btn" style="margin:0;'+okStyle+'" onclick="sendAvail(\''+t.id+'\',\'o\')">〇 いける</button>'
+      +'<button class="btn" style="margin:0;'+ngStyle+'" onclick="sendAvail(\''+t.id+'\',\'x\')">× むり</button>'
+      +'</div>'
+      +(a?'<div class="note" style="margin-top:8px">回答済み：'+(a==="o"?"〇 いける":"× むり")+'（変更もできます）</div>':'')
+      +'</div></div>';
+  }
+
+  function sendAvail(id,ans){
+    var t=tasks.filter(function(x){return x.id===id;})[0];
+    if(!CONFIG.API_URL){ if(t){t.myAnswer=ans;} renderHome(); return; }
+    fetch(CONFIG.API_URL, {method:"POST", body:JSON.stringify({action:"avail", taskId:id, cleaner:CONFIG.CLEANER, answer:ans})})
+      .then(function(r){return r.json();})
+      .then(function(){ if(t){t.myAnswer=ans;} renderHome(); })
+      .catch(function(){ alert("送信に失敗しました。通信を確認して再度お試しください。"); });
   }
 
   function fmtDate(d){ var p=String(d).split("/"); if(p.length<3) return d;
