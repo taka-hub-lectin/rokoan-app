@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ロコ庵 清掃タスク</title>
+<style>
+  :root{
+    --blue:#4A90C3; --blue-deep:#2E6A99; --ink:#22303C; --muted:#7A8896;
+    --line:#E3E9EF; --bg:#F4F7FA; --card:#FFFFFF;
+    --done-bg:#EAF6EE; --done-mark:#3FA05F; --done-ink:#9BB0A4;
+    --warn-bg:#FDECEC; --warn-ink:#C0392B; --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;}
+  header{position:sticky; top:0; z-index:5; background:var(--blue); color:#fff;
+    padding:14px 16px; display:flex; align-items:center; gap:10px;}
+  .h-back{background:none; border:none; color:#fff; font-size:22px; padding:0 4px 0 0; cursor:pointer; line-height:1;}
+  .h-title{font-size:17px; font-weight:600;}
+  .h-sub{font-size:12px; opacity:.9; margin-top:1px;}
+  .wrap{max-width:640px; margin:0 auto; padding:14px 14px 40px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 1px 3px rgba(20,40,60,.05); margin-bottom:12px; overflow:hidden;}
+  .task{display:block; text-decoration:none; color:inherit; cursor:pointer; padding:14px 16px;}
+  .task-top{display:flex; justify-content:space-between; align-items:center;}
+  .task-fac{font-size:17px; font-weight:600;}
+  .pill{font-size:12px; padding:3px 10px; border-radius:20px; white-space:nowrap;}
+  .pill-todo{background:#FBF0DD; color:#9A6B12;}
+  .pill-done{background:var(--done-bg); color:var(--done-mark);}
+  .task-meta{font-size:13px; color:var(--muted); margin-top:5px;}
+  .task-warn{display:inline-flex; align-items:center; gap:5px; font-size:12px;
+    color:var(--warn-ink); background:var(--warn-bg); padding:4px 9px; border-radius:8px; margin-top:8px;}
+  .sec-label{font-size:12px; color:var(--muted); margin:16px 4px 8px; font-weight:600;}
+  .row{display:flex; justify-content:space-between; font-size:14px; padding:11px 4px; border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .prog{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-bottom:12px;}
+  .prog-top{display:flex; justify-content:space-between; align-items:baseline; font-size:14px;}
+  .prog-num{font-size:15px; font-weight:600;}
+  .bar{height:8px; background:var(--line); border-radius:8px; margin-top:9px; overflow:hidden;}
+  .bar-fill{height:100%; width:0; background:var(--done-mark); border-radius:8px; transition:width .2s;}
+  .sec-h{font-size:14px; font-weight:600; color:var(--blue-deep); padding:14px 16px 6px;}
+  .chk{display:flex; align-items:center; gap:12px; padding:13px 16px; border-top:1px solid var(--line);
+    cursor:pointer; min-height:60px;}
+  .chk:active{background:#F2F7FB;}
+  .chk.on{background:var(--done-bg);}
+  .chk.on .chk-t{color:var(--done-ink); text-decoration:line-through;}
+  .box{width:24px; height:24px; border-radius:7px; border:2px solid var(--line); flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center; font-size:15px; color:#fff;}
+  .chk.on .box{background:var(--done-mark); border-color:var(--done-mark);}
+  .chk-t{font-size:15px;}
+  .tip{font-size:12px; color:var(--warn-ink); background:var(--warn-bg); border-radius:8px;
+    padding:6px 10px; margin-top:6px; display:block; line-height:1.45;}
+  .tip-sec{margin:0 16px 10px;}
+  .photos{display:flex; gap:10px; padding:4px 0;}
+  .ph{flex:1; aspect-ratio:1; border:2px dashed var(--line); border-radius:12px; background:#fff;
+    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:26px;
+    cursor:pointer; overflow:hidden; position:relative;}
+  .ph img{width:100%; height:100%; object-fit:cover;}
+  .btn{display:block; width:100%; border:none; border-radius:12px; padding:15px; font-size:16px;
+    font-weight:600; cursor:pointer; margin-top:16px;}
+  .btn-go{background:var(--blue); color:#fff;}
+  .btn-go:disabled{background:#B8CEDF;}
+  .btn-ghost{background:#fff; color:var(--ink); border:1px solid var(--line);}
+  .done-wrap{text-align:center; padding:48px 20px;}
+  .done-circle{width:74px; height:74px; border-radius:50%; background:var(--done-bg);
+    display:flex; align-items:center; justify-content:center; font-size:38px; color:var(--done-mark); margin:0 auto 18px;}
+  .empty{text-align:center; color:var(--muted); padding:40px 16px; font-size:14px;}
+  .note{font-size:12px; color:var(--muted); text-align:center; margin-top:16px;}
+</style>
+</head>
+<body>
+<header>
+  <button class="h-back" id="back" onclick="showHome()" style="display:none" aria-label="戻る">‹</button>
+  <div>
+    <div class="h-title" id="htitle">ロコ庵 清掃タスク</div>
+    <div class="h-sub" id="hsub">今日の担当</div>
+  </div>
+</header>
+<div class="wrap">
+  <div id="home"></div>
+  <div id="detail" style="display:none"></div>
+  <div id="done" style="display:none"></div>
+</div>
+
+<script>
+  var CONFIG = {
+    API_URL: "https://script.google.com/macros/s/AKfycby1WJPnVCQxSqeFoh9ZdZX0LU7BXgdNTDg5DWqOawZ3yq-tVbi5oZh5Die2idnYoaKr/exec",
+    CLEANER: (new URLSearchParams(location.search)).get("c") || "デモ清掃者"
+  };
+
+  var SECTIONS = [
+    { t:"カードキー回収", items:[] },
+    { t:"換気", items:[] },
+    { t:"風呂", items:["窓を全開にする","シャワー・洗剤でそうじ（ボトル・洗面器も）","シャンプー台→外で乾燥","排水口そうじ→ネット交換","残量チェック（シャンプー/トリートメント/ボディソープ/バスマジックリン）"] },
+    { t:"洗面所", items:["コップを洗う","コップ台→外で乾燥","洗面台を洗う（ハミガキの飛び散り確認・排水口も）","手洗いソープが出るかチェック","タオル回収","洗たく機・周辺そうじ","残量チェック（アタック/ハミング）"] },
+    { t:"台所", items:["冷蔵庫チェック","コップ・鍋の洗浄・汚れチェック","IH・流し台そうじ→排水口ネット交換","レンジ・トースター庫内そうじ","湯わかしポットの中身チェック","コーヒーメーカーそうじ","ランチョンマット・テーブルそうじ"] },
+    { t:"トイレ", items:["便器・床そうじ","トイレットペーパー・ナプキン補充"] },
+    { t:"ゴミ出し", items:["寝室①","寝室②","リビング","トイレの汚物入れ","風呂の排水口","流しの排水口","分別ゴミ箱"] },
+    { t:"灰皿", items:["そうじして乾燥させる"] },
+    { t:"シーツ交換", items:["キルトパッドは下の洗たく機で洗い自然乾燥","タオル・シーツ類はランドリーで乾燥までする"] },
+    { t:"空気清浄機の水を抜く", items:[] },
+    { t:"植物の水やり", items:[] },
+    { t:"ティッシュ残量チェック", items:[] }
+  ];
+
+  // 注意メモ（キー=項目文言 or セクション名 と完全一致）。ここに追記すれば該当行に⚠で出る。
+  // ※下記は例。実際の注意点に差し替えてください。
+  var NOTES = {
+    "カードキー回収":"回収忘れ厳禁。所定の場所に戻す",
+    "排水口そうじ→ネット交換":"ネットは毎回必ず新品に交換",
+    "残量チェック（シャンプー/トリートメント/ボディソープ/バスマジックリン）":"少なければ写真を撮ってオーナーに報告",
+    "ゴミ出し":"分別を間違えると回収されません"
+  };
+
+  var DEMO_TASKS = [
+    { id:"M-20260712-demo1", facility:"母屋", date:"2026/07/12", status:"未着手", sameDayIn:true },
+    { id:"M-20260802-demo2", facility:"母屋", date:"2026/08/02", status:"未着手", sameDayIn:false }
+  ];
+
+  var tasks = [], current = null, photos = [];
+
+  function ckeys(){ var a=[]; SECTIONS.forEach(function(s,si){
+    if(s.items.length===0){ a.push("s"+si); } else { s.items.forEach(function(_,ii){ a.push("s"+si+"i"+ii); }); }
+  }); return a; }
+  function stateKey(id){ return "rokoan-clean-"+id; }
+  function loadState(id){ try{ return JSON.parse(localStorage.getItem(stateKey(id))||"{}"); }catch(e){ return {}; } }
+  function saveState(id,st){ localStorage.setItem(stateKey(id), JSON.stringify(st)); }
+
+  function showHome(){
+    document.getElementById("detail").style.display="none";
+    document.getElementById("done").style.display="none";
+    document.getElementById("home").style.display="block";
+    document.getElementById("back").style.display="none";
+    document.getElementById("htitle").textContent="ロコ庵 清掃タスク";
+    document.getElementById("hsub").textContent=CONFIG.CLEANER+" さん";
+    renderHome();
+  }
+
+  function renderHome(){
+    var el=document.getElementById("home");
+    if(!tasks.length){ el.innerHTML='<div class="empty">今の担当はありません。<br>新しい予約が入ると自動で表示されます。</div>'; return; }
+    var todo=tasks.filter(function(t){return t.status!=="報告済"&&t.status!=="承認";});
+    var doneList=tasks.filter(function(t){return t.status==="報告済"||t.status==="承認";});
+    var h="";
+    h+='<div class="sec-label">やること（'+todo.length+'）</div>';
+    todo.forEach(function(t){ h+=taskCard(t); });
+    if(!todo.length) h+='<div class="empty">未対応はありません。おつかれさまです。</div>';
+    if(doneList.length){
+      h+='<div class="sec-label">報告済み</div>';
+      doneList.forEach(function(t){ h+=taskCard(t); });
+    }
+    el.innerHTML=h;
+  }
+
+  function taskCard(t){
+    var done=(t.status==="報告済"||t.status==="承認");
+    var pill=done?'<span class="pill pill-done">✓ '+t.status+'</span>':'<span class="pill pill-todo">'+t.status+'</span>';
+    var warn=(t.sameDayIn&&!done)?'<div class="task-warn">⚠ 当日チェックインあり・時間厳守</div>':'';
+    return '<div class="card"><div class="task" onclick="openTask(\''+t.id+'\')">'
+      +'<div class="task-top"><span class="task-fac">'+t.facility+'</span>'+pill+'</div>'
+      +'<div class="task-meta">'+fmtDate(t.date)+' チェックアウト後の清掃</div>'+warn+'</div></div>';
+  }
+
+  function fmtDate(d){ var p=String(d).split("/"); if(p.length<3) return d;
+    var wd=["日","月","火","水","木","金","土"][ new Date(+p[0],+p[1]-1,+p[2]).getDay() ];
+    return (+p[1])+"月"+(+p[2])+"日("+wd+")"; }
+
+  function openTask(id){
+    current=tasks.filter(function(t){return t.id===id;})[0]; if(!current) return;
+    photos=[];
+    document.getElementById("home").style.display="none";
+    document.getElementById("done").style.display="none";
+    document.getElementById("detail").style.display="block";
+    document.getElementById("back").style.display="block";
+    document.getElementById("htitle").textContent=current.facility+" の清掃";
+    document.getElementById("hsub").textContent=fmtDate(current.date);
+    renderDetail();
+  }
+
+  function renderDetail(){
+    var st=loadState(current.id);
+    var keys=ckeys(), done=keys.filter(function(k){return st[k];}).length;
+    var h='<div class="prog"><div class="prog-top"><span>チェック進捗</span>'
+      +'<span class="prog-num"><b id="dn">'+done+'</b> / '+keys.length+'</span></div>'
+      +'<div class="bar"><div class="bar-fill" id="bf" style="width:'+(done/keys.length*100)+'%"></div></div></div>';
+    SECTIONS.forEach(function(s,si){
+      h+='<div class="card"><div class="sec-h">'+(si+1)+'. '+s.t+'</div>';
+      if(s.items.length===0){
+        h+=chkRow("s"+si, s.t, st["s"+si]);
+      } else {
+        if(NOTES[s.t]) h+='<div class="tip tip-sec">⚠ '+NOTES[s.t]+'</div>';
+        s.items.forEach(function(it,ii){ h+=chkRow("s"+si+"i"+ii, it, st["s"+si+"i"+ii]); });
+      }
+      h+='</div>';
+    });
+    h+='<div class="sec-label">完了写真（寝室・水回り・全体など）</div>'
+      +'<div class="card" style="padding:14px 16px"><div class="photos" id="phRow">'
+      +'<label class="ph"><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this,0)"><span>＋</span></label>'
+      +'<label class="ph"><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this,1)"><span>＋</span></label>'
+      +'<label class="ph"><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this,2)"><span>＋</span></label>'
+      +'</div></div>';
+    h+='<button class="btn btn-go" id="submitBtn" onclick="submitReport()">完了を報告する</button>';
+    h+='<div class="note">タップでチェック・自動保存されます</div>';
+    document.getElementById("detail").innerHTML=h;
+  }
+
+  function chkRow(key,label,on){
+    var note=NOTES[label]?'<span class="tip">⚠ '+NOTES[label]+'</span>':'';
+    return '<div class="chk'+(on?' on':'')+'" onclick="toggle(this,\''+key+'\')">'
+      +'<span class="box">'+(on?'✓':'')+'</span><span class="chk-t">'+label+note+'</span></div>';
+  }
+
+  function toggle(el,key){
+    var st=loadState(current.id); st[key]=!st[key]; saveState(current.id,st);
+    el.classList.toggle("on", st[key]);
+    el.querySelector(".box").textContent = st[key]?"✓":"";
+    var keys=ckeys(), done=keys.filter(function(k){return st[k];}).length;
+    document.getElementById("dn").textContent=done;
+    document.getElementById("bf").style.width=(done/keys.length*100)+"%";
+  }
+
+  function addPhoto(input,idx){
+    var f=input.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){ photos[idx]=r.result;
+      var box=input.parentNode; box.innerHTML=""; var img=new Image(); img.src=r.result; box.appendChild(img);
+    };
+    r.readAsDataURL(f);
+  }
+
+  function submitReport(){
+    var btn=document.getElementById("submitBtn"); btn.disabled=true; btn.textContent="送信中…";
+    var payload={ taskId:current.id, cleaner:CONFIG.CLEANER, checks:loadState(current.id),
+                  photos:photos.filter(Boolean) };
+    if(!CONFIG.API_URL){
+      setTimeout(function(){ current.status="報告済"; showDone(); }, 500); return;
+    }
+    fetch(CONFIG.API_URL, { method:"POST", body:JSON.stringify(payload) })
+      .then(function(r){return r.json();})
+      .then(function(){ current.status="報告済"; showDone(); })
+      .catch(function(e){ btn.disabled=false; btn.textContent="完了を報告する"; alert("送信に失敗しました。電波を確認して再度お試しください。"); });
+  }
+
+  function showDone(){
+    document.getElementById("detail").style.display="none";
+    document.getElementById("home").style.display="none";
+    document.getElementById("done").style.display="block";
+    document.getElementById("back").style.display="none";
+    document.getElementById("done").innerHTML='<div class="done-wrap">'
+      +'<div class="done-circle">✓</div>'
+      +'<div style="font-size:18px; font-weight:600; margin-bottom:6px">報告しました</div>'
+      +'<div style="font-size:14px; color:var(--muted); margin-bottom:24px">'+current.facility+' '+fmtDate(current.date)+' の清掃を記録しました。<br>オーナーに通知が届きます。</div>'
+      +'<button class="btn btn-ghost" style="max-width:220px;margin:0 auto" onclick="showHome()">ホームに戻る</button></div>';
+  }
+
+  function boot(){
+    if(!CONFIG.API_URL){ tasks=DEMO_TASKS; showHome(); return; }
+    fetch(CONFIG.API_URL+"?cleaner="+encodeURIComponent(CONFIG.CLEANER))
+      .then(function(r){return r.json();})
+      .then(function(d){ tasks=d.tasks||[]; showHome(); })
+      .catch(function(){ tasks=DEMO_TASKS; showHome(); });
+  }
+  boot();
+</script>
+</body>
+</html>
