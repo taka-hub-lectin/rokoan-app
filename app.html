@@ -247,7 +247,7 @@ const stStyle  = (s) => String(s||"").startsWith("⚠") || String(s||"").startsW
 const accMark  = (a) => a==="car" ? "🚗" : a==="transit" ? "🚋" : "❓";
 const facOf    = (r) => FAC[r.fkey] || FAC.unknown;
 
-/** その日に泊まっている行（チェックアウト日は含めない。掃除の日は別に出す） */
+/** その日に泊まっている行。チェックアウト日は「もう居ない」ので含めない */
 function staysOn(dstr){
   return DATA.rows.filter(r => {
     const ci = parseYmd(r.ci), co = parseYmd(r.co), d = parseYmd(dstr);
