@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ロコ庵">
+<meta name="theme-color" content="#4A90C3">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="shared/icon-192.png">
+<title>ロコ庵アプリ</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<style>
+  :root{
+    --main:#4A90C3;      /* 母屋 */
+    --main-bg:#E7F1F9;
+    --hanare:#3FA05F;    /* 離れ */
+    --hanare-bg:#E8F5ED;
+    --warn:#D93025;
+    --warn-bg:#FCEAE8;
+    --wait:#C77700;
+    --wait-bg:#FFF4E2;
+    --tabh:62px;
+  }
+  body{padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom,0));}
+
+  header{
+    position:sticky;top:0;z-index:20;background:var(--blue);color:#fff;
+    padding:14px 16px;box-shadow:0 2px 10px rgba(46,106,153,.25);
+  }
+  .h-row{display:flex;align-items:center;gap:10px;}
+  .h-title{font-size:18px;font-weight:700;flex:1;}
+  .h-sub{font-size:11px;opacity:.92;margin-top:2px;}
+  .h-btn{
+    flex:none;background:rgba(255,255,255,.18);border:0;color:#fff;
+    font-size:13px;padding:7px 12px;border-radius:99px;font-family:inherit;
+  }
+  .h-btn:active{background:rgba(255,255,255,.32);}
+
+  main{max-width:680px;margin:0 auto;padding:12px 12px 24px;}
+  .view{display:none;}
+  .view.on{display:block;}
+
+  .banner{
+    border-radius:12px;padding:11px 13px;font-size:13px;line-height:1.5;margin-bottom:12px;
+  }
+  .banner.warn{background:var(--warn-bg);color:#8B1A12;border:1px solid #F3C3BD;}
+  .banner.wait{background:var(--wait-bg);color:#8A5300;border:1px solid #F0DAB4;}
+  .banner.info{background:#EEF3F8;color:#41566B;border:1px solid var(--line);}
+
+  /* ---- カレンダー ---- */
+  .cal-nav{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .cal-nav button{
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    font-size:17px;width:40px;height:38px;font-family:inherit;color:var(--ink);
+  }
+  .cal-nav .m{flex:1;text-align:center;font-size:17px;font-weight:700;}
+  .cal-nav .today{width:auto;padding:0 12px;font-size:13px;}
+
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+  .wd{text-align:center;font-size:11px;color:var(--muted);padding:4px 0;}
+  .wd.sun{color:#C5534B;} .wd.sat{color:#3E72A6;}
+  .cell{
+    position:relative;background:var(--card);border:1px solid var(--line);
+    border-radius:9px;min-height:60px;padding:3px 3px 4px;overflow:hidden;
+  }
+  .cell.out-of{background:#FAFBFC;opacity:.5;}
+  .cell.today{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue);}
+  .cell.sel{border-color:var(--blue-deep);box-shadow:inset 0 0 0 2px var(--blue-deep);}
+  .cell.dbl{border-color:var(--warn);box-shadow:inset 0 0 0 2px var(--warn);}
+  .dnum{font-size:12px;color:var(--ink);text-align:center;line-height:1.4;}
+  .cell.sun .dnum{color:#C5534B;} .cell.sat .dnum{color:#3E72A6;}
+  .bars{display:flex;flex-direction:column;gap:2px;margin-top:2px;}
+  .bar{height:7px;border-radius:3px;background:var(--c);--c:var(--muted);}
+  .bar.main{background:var(--main);}
+  .bar.hanare{background:var(--hanare);}
+  .bar.unknown{background:#B9A26B;}
+  /* 状態（未記入・要対応）でも施設の色は消さない。
+     消すと「どちらの棟が困っているか」がカレンダーから読めなくなる。
+     斜線＝まだ確定していない／赤い縁＝要対応、として色の上に重ねる。 */
+  .bar.ng{background:repeating-linear-gradient(45deg,var(--c) 0 3px,#FFFFFF 3px 6px);}
+  .bar.warn{box-shadow:inset 0 0 0 1.5px var(--warn);}
+  .bar.main{--c:var(--main);}
+  .bar.hanare{--c:var(--hanare);}
+  .bar.unknown{--c:#B9A26B;}
+  .bar.past{opacity:.38;}
+  .cell .clean{position:absolute;right:2px;top:1px;font-size:9px;opacity:.55;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:10px 2px 4px;font-size:11px;color:var(--muted);}
+  .legend i{display:inline-block;width:14px;height:7px;border-radius:3px;vertical-align:middle;margin-right:4px;}
+
+  /* ---- カード ---- */
+  .sec{font-size:13px;font-weight:700;color:var(--muted);margin:18px 2px 8px;}
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 13px;margin-bottom:9px;
+  }
+  .card.main{border-left:4px solid var(--main);}
+  .card.hanare{border-left:4px solid var(--hanare);}
+  .card.unknown{border-left:4px solid #B9A26B;}
+  .card.alert{border-left:4px solid var(--warn);background:var(--warn-bg);}
+  .card.past{opacity:.62;}
+  .c-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .c-fac{font-size:12px;font-weight:700;}
+  .c-fac.main{color:var(--main);} .c-fac.hanare{color:var(--hanare);} .c-fac.unknown{color:#8A7433;}
+  .c-date{font-size:15px;font-weight:700;}
+  .c-n{font-size:12px;color:var(--muted);}
+  .c-rep{font-size:15px;font-weight:700;margin-top:6px;word-break:break-word;}
+  .c-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+  .c-st{font-size:13px;margin-top:7px;line-height:1.5;word-break:break-word;}
+  .c-st.ok{color:var(--done);} .c-st.ng{color:var(--warn);font-weight:700;} .c-st.wait{color:var(--wait);}
+  .empty{color:var(--muted);font-size:13px;padding:10px 2px;}
+
+  details{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:2px 13px;margin-top:14px;}
+  summary{padding:11px 0;font-size:14px;font-weight:700;cursor:pointer;}
+
+  /* ---- タブ ---- */
+  nav.tabs{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;
+    background:rgba(255,255,255,.97);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom,0);backdrop-filter:blur(8px);
+  }
+  nav.tabs a{
+    flex:1;text-align:center;text-decoration:none;color:var(--muted);
+    font-size:10px;padding:8px 2px 9px;line-height:1.5;
+  }
+  nav.tabs a .ic{display:block;font-size:21px;line-height:1.15;}
+  nav.tabs a.on{color:var(--blue-deep);font-weight:700;}
+
+  /* ---- その他タブ ---- */
+  .link{
+    display:flex;align-items:center;gap:13px;text-decoration:none;color:inherit;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:15px 14px;margin-bottom:9px;
+  }
+  .link .ico{
+    flex:none;width:44px;height:44px;border-radius:12px;background:#EAF2F9;
+    display:flex;align-items:center;justify-content:center;font-size:22px;
+  }
+  .link .t{font-size:16px;font-weight:700;}
+  .link .d{font-size:12px;color:var(--muted);margin-top:2px;}
+  .link .ar{margin-left:auto;color:var(--blue);font-weight:700;}
+
+  .setup input{
+    width:100%;padding:12px;font-size:16px;font-family:inherit;
+    border:1px solid var(--line);border-radius:10px;margin-top:6px;
+  }
+  .setup button{
+    width:100%;margin-top:12px;padding:13px;font-size:16px;font-family:inherit;
+    background:var(--blue);color:#fff;border:0;border-radius:10px;font-weight:700;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-row">
+    <div style="flex:1">
+      <div class="h-title" id="title">ロコ庵</div>
+      <div class="h-sub" id="sub">読み込み中…</div>
+    </div>
+    <button class="h-btn" id="reload">更新</button>
+  </div>
+</header>
+
+<main>
+  <div class="view on" id="v-cal"></div>
+  <div class="view" id="v-list"></div>
+  <div class="view" id="v-etc"></div>
+</main>
+
+<nav class="tabs">
+  <a href="#" data-tab="cal" class="on"><span class="ic">📅</span>カレンダー</a>
+  <a href="#" data-tab="list"><span class="ic">📋</span>予約</a>
+  <a href="cleaning.html"><span class="ic">🧹</span>掃除</a>
+  <a href="#" data-tab="etc"><span class="ic">⋯</span>その他</a>
+</nav>
+
+<script src="shared/store.js"></script>
+<script src="shared/api.js"></script>
+<script>
+/* =========================================================
+   ロコ庵アプリ（家族用）
+   データは「📅アプリ用」シート。作っているのは名簿GASで、
+   Airbnbとの突き合わせ（施設×チェックイン日）もあちらで済んでいる。
+   この画面では突き合わせも駐車の重なりも計算し直さない。
+   ========================================================= */
+const WD = ["日","月","火","水","木","金","土"];
+const FAC = {
+  main:    { label:"🏠 母屋", short:"母屋", cls:"main" },
+  hanare:  { label:"🌿 離れ", short:"離れ", cls:"hanare" },
+  unknown: { label:"⚠️ 未確定", short:"未確定", cls:"unknown" },
+};
+const STALE_HOURS = 26;   // 名簿GASのBOARD_STALE_HOURSと同じ
+
+let DATA = { updated:"", rows:[], notes:[] };
+let curMonth = startOfMonth(new Date());
+let selDay = null;
+
+/* ---- 日付（文字列は必ず現地時間として読む。UTC解釈で1日ずれるのを避ける）---- */
+function parseYmd(s){
+  const m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(+m[1], +m[2]-1, +m[3]) : null;
+}
+function ymd(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0")
+       + "-" + String(d.getDate()).padStart(2,"0");
+}
+function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
+function today0(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+function fmtMD(s){
+  const d = parseYmd(s); if(!d) return s||"";
+  return (d.getMonth()+1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ")";
+}
+const esc = (s) => String(s==null?"":s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---- 行の見かた ---- */
+const isPast   = (r) => r.past === true || r.past === "TRUE" || r.past === "true";
+const stStyle  = (s) => String(s||"").startsWith("⚠") || String(s||"").startsWith("⛔") ? "ng"
+                      : String(s||"").startsWith("⏳") ? "wait" : "ok";
+const accMark  = (a) => a==="car" ? "🚗" : a==="transit" ? "🚋" : "❓";
+const facOf    = (r) => FAC[r.fkey] || FAC.unknown;
+
+/** その日に泊まっている行（チェックアウト日は含めない。掃除の日は別に出す） */
+function staysOn(dstr){
+  return DATA.rows.filter(r => {
+    const ci = parseYmd(r.ci), co = parseYmd(r.co), d = parseYmd(dstr);
+    if (!ci || !d) return false;
+    if (!co) return ymd(ci) === dstr;
+    return d >= ci && d < co;
+  });
+}
+function checkoutsOn(dstr){ return DATA.rows.filter(r => r.co === dstr); }
+function dblDays(){
+  const set = new Set();
+  DATA.notes.filter(n => n.kind === "double").forEach(n => {
+    const s = parseYmd(n.start), e = parseYmd(n.end);
+    if (!s || !e) return;
+    for (let d = new Date(s); d < e; d.setDate(d.getDate()+1)) set.add(ymd(d));
+  });
+  return set;
+}
+
+/* =========================================================
+   カレンダー
+   ========================================================= */
+function renderCal(){
+  const el = document.getElementById("v-cal");
+  const first = curMonth;
+  const start = new Date(first); start.setDate(1 - first.getDay());
+  const t0 = ymd(today0());
+  const dbl = dblDays();
+
+  let cells = "";
+  for (let i = 0; i < 42; i++){
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const ds = ymd(d);
+    const outOf = d.getMonth() !== first.getMonth();
+    const stays = staysOn(ds);
+    const outs  = checkoutsOn(ds);
+
+    const bars = stays.slice(0,3).map(r => {
+      const k = stStyle(r.status);
+      const cls = [ "bar", facOf(r).cls,
+                    k==="wait" ? "ng" : "", k==="ng" ? "warn" : "",
+                    isPast(r) ? "past" : "" ].filter(Boolean).join(" ");
+      return `<span class="${cls}"></span>`;
+    }).join("");
+
+    cells += `<div class="cell${outOf?" out-of":""}${ds===t0?" today":""}`
+      + `${ds===selDay?" sel":""}${dbl.has(ds)?" dbl":""}`
+      + `${d.getDay()===0?" sun":""}${d.getDay()===6?" sat":""}" data-d="${ds}">`
+      + (outs.length && !stays.length ? `<span class="clean">🧹</span>` : "")
+      + `<div class="dnum">${d.getDate()}</div><div class="bars">${bars}</div></div>`;
+  }
+
+  el.innerHTML = staleBanner()
+    + `<div class="cal-nav">
+         <button id="prev">‹</button>
+         <div class="m">${first.getFullYear()}年${first.getMonth()+1}月</div>
+         <button class="today" id="tdy">今日</button>
+         <button id="next">›</button>
+       </div>
+       <div class="grid">${WD.map((w,i)=>`<div class="wd${i===0?" sun":""}${i===6?" sat":""}">${w}</div>`).join("")}</div>
+       <div class="grid" id="days" style="margin-top:3px">${cells}</div>
+       <div class="legend">
+         <span><i style="background:var(--main)"></i>母屋</span>
+         <span><i style="background:var(--hanare)"></i>離れ</span>
+         <span><i class="bar ng" style="--c:var(--main)"></i>斜線＝フォーム未記入</span>
+         <span><i class="bar warn" style="--c:var(--main)"></i>赤い縁＝要対応</span>
+         <span>🧹 掃除の日（チェックアウト）</span>
+       </div>
+       <div id="daydetail"></div>`;
+
+  document.getElementById("prev").onclick = () => { curMonth = addMonths(curMonth,-1); selDay=null; renderCal(); };
+  document.getElementById("next").onclick = () => { curMonth = addMonths(curMonth, 1); selDay=null; renderCal(); };
+  document.getElementById("tdy").onclick  = () => { curMonth = startOfMonth(new Date()); selDay=ymd(today0()); renderCal(); };
+  document.querySelectorAll("#days .cell").forEach(c => {
+    c.onclick = () => { selDay = c.dataset.d; renderCal(); };
+  });
+  if (selDay) renderDayDetail();
+}
+
+function renderDayDetail(){
+  const box = document.getElementById("daydetail");
+  if (!box || !selDay) return;
+  const stays = staysOn(selDay);
+  const outs  = checkoutsOn(selDay).filter(r => !stays.includes(r));
+  const d = parseYmd(selDay);
+
+  let h = `<div class="sec">${d.getMonth()+1}月${d.getDate()}日(${WD[d.getDay()]})</div>`;
+  if (!stays.length && !outs.length) h += `<div class="empty">予定はありません</div>`;
+  stays.forEach(r => h += cardHtml(r));
+  outs.forEach(r => h += `<div class="card ${facOf(r).cls}">
+      <div class="c-top"><span class="c-fac ${facOf(r).cls}">${facOf(r).label}</span>
+      <span class="c-date">🧹 掃除の日</span></div>
+      <div class="c-rep">${esc(r.rep)} さんがチェックアウト</div></div>`);
+  box.innerHTML = h;
+  box.scrollIntoView({ behavior:"smooth", block:"nearest" });
+}
+
+/* =========================================================
+   予約タブ
+   ========================================================= */
+function cardHtml(r){
+  const f = facOf(r);
+  const k = stStyle(r.status);
+  const meta = [
+    r.count !== "" && r.count != null ? r.count + "名" : "",
+    r.nats || "",
+  ].filter(Boolean).join("・");
+  return `<div class="card ${f.cls}${isPast(r)?" past":""}">
+    <div class="c-top">
+      <span class="c-fac ${f.cls}">${f.label}</span>
+      <span class="c-date">${fmtMD(r.ci)} → ${fmtMD(r.co)}</span>
+      <span class="c-n">${r.nights ? r.nights + "泊" : ""}</span>
+    </div>
+    <div class="c-rep">${accMark(r.access)} ${esc(r.rep)}</div>
+    ${meta ? `<div class="c-meta">${esc(meta)}</div>` : ""}
+    <div class="c-st ${k}">${esc(r.status)}</div>
+  </div>`;
+}
+
+function renderList(){
+  const el = document.getElementById("v-list");
+  const future = DATA.rows.filter(r => !isPast(r));
+  const past   = DATA.rows.filter(isPast).sort((a,b) => String(b.ci).localeCompare(String(a.ci)));
+  const todo   = future.filter(r => stStyle(r.status) !== "ok");
+  const parks  = DATA.notes.filter(n => n.kind === "parking");
+  const dbls   = DATA.notes.filter(n => n.kind === "double");
+
+  let h = staleBanner();
+  h += `<div class="banner info">これから ${future.length}件　⚠️要対応 ${todo.length}件　🚗駐車が2台 ${parks.length}件</div>`;
+
+  if (dbls.length){
+    h += `<div class="sec">⛔ ダブルブッキングの疑い</div>`;
+    dbls.forEach(n => h += `<div class="card alert">
+      <div class="c-date">${fmtMD(n.start)} → ${fmtMD(n.end)}</div>
+      <div class="c-rep">${esc(n.main)}</div>
+      <div class="c-st ng">${esc(n.note)}</div></div>`);
+  }
+  if (todo.length){
+    h += `<div class="sec">⚠️ 要対応</div>`;
+    todo.forEach(r => h += cardHtml(r));
+  }
+  if (parks.length){
+    h += `<div class="sec">🚗 駐車が2台になる日</div>`;
+    parks.forEach(n => h += `<div class="card">
+      <div class="c-date">${fmtMD(n.start)} → ${fmtMD(n.end)}<span class="c-n"> ${n.nights||""}日</span></div>
+      <div class="c-meta">🏠 ${esc(n.main)}　／　🌿 ${esc(n.hanare)}</div>
+      ${n.note ? `<div class="c-st wait">${esc(n.note)}</div>` : ""}</div>`);
+  }
+
+  ["main","hanare","unknown"].forEach(k => {
+    const list = future.filter(r => (r.fkey||"unknown") === k);
+    if (!list.length && k === "unknown") return;
+    h += `<div class="sec">${FAC[k].label}　これからの予定</div>`;
+    h += list.length ? list.map(cardHtml).join("") : `<div class="empty">（予定なし）</div>`;
+  });
+
+  h += `<details><summary>済んだ予約（${past.length}件）</summary>
+        <div style="padding-bottom:10px">${past.length ? past.map(cardHtml).join("") : `<div class="empty">ありません</div>`}</div>
+        </details>`;
+  el.innerHTML = h;
+}
+
+/* =========================================================
+   その他タブ
+   ========================================================= */
+function renderEtc(){
+  const items = [
+    { i:"🧹", t:"清掃チェック", d:"退室後の掃除チェックリスト", u:"cleaning.html" },
+    { i:"📅", t:"定期業務", d:"毎月の県報告・県税・記帳チェック", u:"monthly.html" },
+    { i:"📋", t:"業務分担表", d:"業務の役割分担一覧", u:"handover.html" },
+    { i:"🧾", t:"清掃タスク", d:"担当・チェック＋写真で報告", u:"cleaning-tasks.html" },
+    { i:"✅", t:"清掃の承認", d:"報告された清掃を写真で確認", u:"cleaning-approve.html" },
+    { i:"🏠", t:"運営ハブ", d:"これまでのカード一覧", u:"index.html" },
+  ];
+  document.getElementById("v-etc").innerHTML =
+    items.map(m => `<a class="link" href="${m.u}">
+      <span class="ico">${m.i}</span>
+      <span><span class="t">${m.t}</span><span class="d">${m.d}</span></span>
+      <span class="ar">›</span></a>`).join("")
+    + `<div class="empty" style="margin-top:16px">
+         予約データの最終更新: ${esc(DATA.updated || "まだ取得していません")}
+       </div>`;
+}
+
+/* =========================================================
+   共通
+   ========================================================= */
+function staleBanner(){
+  if (!DATA.updated) return "";
+  const m = String(DATA.updated).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return "";
+  const t = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
+  const hrs = (Date.now() - t.getTime()) / 3600000;
+  if (hrs < STALE_HOURS) return "";
+  return `<div class="banner warn">自動チェックが${Math.floor(hrs/24)}日以上止まっています
+          （最終更新 ${esc(DATA.updated)}）。たかさんに連絡してください。</div>`;
+}
+
+function renderAll(){ renderCal(); renderList(); renderEtc(); }
+
+function setSub(text){ document.getElementById("sub").textContent = text; }
+
+async function refresh(){
+  setSub("読み込み中…");
+  const res = await RocoApi.load();
+  if (res.data) { DATA = res.data; }
+
+  if (res.ok){
+    setSub("最終更新 " + (DATA.updated || "—"));
+  } else if (res.error === "setup"){
+    return renderSetup();
+  } else if (res.error === "denied"){
+    return renderSetup("リンクが正しくないようです。合言葉をもう一度入れてください。");
+  } else if (DATA.rows.length){
+    setSub("前回の内容を表示中（通信できませんでした）");
+  } else {
+    setSub("取れませんでした（" + res.error + "）");
+  }
+  renderAll();
+}
+
+function renderSetup(msg){
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("on"));
+  const el = document.getElementById("v-cal");
+  el.classList.add("on");
+  setSub("最初の設定");
+  el.innerHTML = `
+    <div class="banner ${msg ? "warn" : "info"}">
+      ${msg ? esc(msg) : "家族に配られたリンクから開くと、ここは出ません。<br>合言葉を入れると、この端末に覚えます。"}
+    </div>
+    <div class="card setup">
+      <div style="font-size:13px;font-weight:700">合言葉</div>
+      <input id="s-key" type="text" inputmode="latin" autocapitalize="off"
+             autocomplete="off" placeholder="リンクの #k= のあとの文字" value="${esc(RocoApi.key())}">
+      <div style="font-size:13px;font-weight:700;margin-top:14px">窓口のURL</div>
+      <input id="s-api" type="url" inputmode="url" autocapitalize="off"
+             autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"
+             value="${/PLACEHOLDER/.test(RocoApi.apiUrl()) ? "" : esc(RocoApi.apiUrl())}">
+      <button id="s-save">保存して読み込む</button>
+    </div>`;
+  document.getElementById("s-save").onclick = () => {
+    const k = document.getElementById("s-key").value.trim();
+    const a = document.getElementById("s-api").value.trim();
+    if (k) RocoApi.setKey(k);
+    if (a) RocoApi.setApiUrl(a);
+    refresh();
+  };
+}
+
+document.querySelectorAll("nav.tabs a[data-tab]").forEach(a => {
+  a.onclick = (ev) => {
+    ev.preventDefault();
+    document.querySelectorAll("nav.tabs a").forEach(x => x.classList.remove("on"));
+    a.classList.add("on");
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("on"));
+    document.getElementById("v-" + a.dataset.tab).classList.add("on");
+    window.scrollTo(0,0);
+  };
+});
+document.getElementById("reload").onclick = refresh;
+
+// 前回の内容があれば先に出す（通信を待たせない）
+const c = RocoApi.cached();
+if (c) { DATA = c; renderAll(); }
+refresh();
+</script>
+</body>
+</html>

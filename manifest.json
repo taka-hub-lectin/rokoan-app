@@ -1,0 +1,16 @@
+{
+  "name": "ロコ庵アプリ",
+  "short_name": "ロコ庵",
+  "description": "ロコ庵の予約カレンダー・予約の詳細・掃除チェック（家族用）",
+  "start_url": "app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F7FA",
+  "theme_color": "#4A90C3",
+  "lang": "ja",
+  "icons": [
+    { "src": "shared/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "shared/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
