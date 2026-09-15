@@ -18,7 +18,7 @@
   // 窓口GASの /exec。合言葉と違い、これ自体は鍵ではない（鍵が無いと denied を返す）。
   // デプロイし直してURLが変わったら、ここを直すか #api= を付けたリンクで上書きする。
   const DEFAULT_API_URL =
-    "https://script.google.com/macros/s/AKfycbzPLACEHOLDER/exec";
+    "https://script.google.com/macros/s/AKfycbx7JRqtaW61N1seaR8h6cPb6FWzk77d6Bpyu56l9NfuGCgZFRQ-shhiT1ddfneQiJic/exec";
 
   const K_KEY = "app:key";
   const K_API = "app:apiUrl";
@@ -50,7 +50,7 @@
   function setApiUrl(u) { _api = u; Store.set(K_API, u); }
   function key() { return _key; }
   function apiUrl() { return _api || DEFAULT_API_URL; }
-  function isReady() { return !!_key && !/PLACEHOLDER/.test(apiUrl()); }
+  function isReady() { return !!_key && /^https:\/\/script\.google\.com\/.+\/exec$/.test(apiUrl()); }
 
   function cached() { return rawGet(K_CACHE); }
 

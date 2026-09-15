@@ -469,7 +469,7 @@ function renderSetup(msg){
       <div style="font-size:13px;font-weight:700;margin-top:14px">窓口のURL</div>
       <input id="s-api" type="url" inputmode="url" autocapitalize="off"
              autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"
-             value="${/PLACEHOLDER/.test(RocoApi.apiUrl()) ? "" : esc(RocoApi.apiUrl())}">
+             value="${esc(RocoApi.apiUrl())}">
       <button id="s-save">保存して読み込む</button>
     </div>`;
   document.getElementById("s-save").onclick = () => {
