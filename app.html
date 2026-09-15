@@ -412,10 +412,17 @@ function renderEtc(){
 /* =========================================================
    共通
    ========================================================= */
+/**
+ * 「自動チェックが止まっていないか」を出す。
+ * 読めない形式だったときに黙って何も出さないと、見張りが死んだことに誰も気づけない。
+ * （2026-09-15: スプシが文字列の日時を日付の値に変換してしまい、
+ *   "Tue Sep 15 2026 …" の形で届いて、この判定が静かに外れていた）
+ */
 function staleBanner(){
   if (!DATA.updated) return "";
   const m = String(DATA.updated).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
-  if (!m) return "";
+  if (!m) return `<div class="banner wait">最終更新の日時が読めませんでした
+          （${esc(DATA.updated)}）。止まっていないかの確認ができていません。</div>`;
   const t = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
   const hrs = (Date.now() - t.getTime()) / 3600000;
   if (hrs < STALE_HOURS) return "";
