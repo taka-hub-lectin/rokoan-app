@@ -125,8 +125,29 @@
     flex:1;text-align:center;text-decoration:none;color:var(--muted);
     font-size:10px;padding:8px 2px 9px;line-height:1.5;
   }
-  nav.tabs a .ic{display:block;font-size:21px;line-height:1.15;}
+  nav.tabs a .ic{display:block;font-size:21px;line-height:1.15;position:relative;}
   nav.tabs a.on{color:var(--blue-deep);font-weight:700;}
+  .badge{
+    position:absolute;top:-4px;left:calc(50% + 8px);min-width:18px;height:18px;padding:0 5px;
+    border-radius:99px;background:var(--warn);color:#fff;font-size:11px;font-weight:700;
+    line-height:18px;text-align:center;
+  }
+  .badge[hidden]{display:none;}
+
+  /* ---- お知らせ ---- */
+  .ntc{position:relative;}
+  .ntc.unread{border-left:4px solid var(--warn);}
+  .ntc.unread::after{content:"未読";position:absolute;right:12px;top:10px;font-size:10px;color:var(--warn);font-weight:700;}
+  .ntc .n-at{font-size:11px;color:var(--muted);}
+  .ntc .n-title{font-size:15px;font-weight:700;margin-top:3px;line-height:1.45;word-break:break-word;}
+  .ntc .n-body{font-size:13px;color:#3c4043;margin-top:6px;line-height:1.55;word-break:break-word;}
+  .ntc .n-act{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;}
+  .ntc .n-act a,.ntc .n-act button{
+    font-size:13px;font-family:inherit;text-decoration:none;color:var(--blue-deep);
+    background:#EAF2F9;border:0;border-radius:99px;padding:6px 12px;
+  }
+  .n-tools{display:flex;justify-content:flex-end;margin:-2px 0 10px;}
+  .n-tools button{font-size:12px;font-family:inherit;color:var(--muted);background:none;border:1px solid var(--line);border-radius:99px;padding:5px 11px;}
 
   /* ---- その他タブ ---- */
   .link{
@@ -167,12 +188,14 @@
 <main>
   <div class="view on" id="v-cal"></div>
   <div class="view" id="v-list"></div>
+  <div class="view" id="v-notices"></div>
   <div class="view" id="v-etc"></div>
 </main>
 
 <nav class="tabs">
   <a href="#" data-tab="cal" class="on"><span class="ic">📅</span>カレンダー</a>
   <a href="#" data-tab="list"><span class="ic">📋</span>予約</a>
+  <a href="#" data-tab="notices"><span class="ic">🔔<span class="badge" id="nbadge" hidden></span></span>お知らせ</a>
   <a href="cleaning.html"><span class="ic">🧹</span>掃除</a>
   <a href="#" data-tab="etc"><span class="ic">⋯</span>その他</a>
 </nav>
@@ -194,7 +217,8 @@ const FAC = {
 };
 const STALE_HOURS = 26;   // 名簿GASのBOARD_STALE_HOURSと同じ
 
-let DATA = { updated:"", rows:[], notes:[] };
+let DATA = { updated:"", rows:[], notes:[], notices:[] };
+let READ = new Set();   // 既読のお知らせid（端末ごと・Store "app:read"）
 let curMonth = startOfMonth(new Date());
 let selDay = null;
 
@@ -388,6 +412,82 @@ function renderList(){
 }
 
 /* =========================================================
+   🔔 お知らせタブ（メールの代わり・2026-09-15 段階1）
+   名簿GASが「📅アプリ用_お知らせ」に1件1行で書いたものを、新しい順に出す。
+   既読は端末ごと（家族で共有しない）。バッジ＝未読の数。
+   ========================================================= */
+const KIND_ICON = { ng:"⏳", sc:"⚠️", park:"🚗", fail:"🛑", test:"🔔", info:"ℹ️", roster:"📋" };
+
+function notices(){
+  return (DATA.notices || []).slice().sort((a,b) => String(b.at).localeCompare(String(a.at)));
+}
+function unreadCount(){ return notices().filter(n => !READ.has(String(n.id))).length; }
+function updateBadge(){
+  const b = document.getElementById("nbadge");
+  const c = unreadCount();
+  b.textContent = c > 99 ? "99+" : String(c);
+  b.hidden = c === 0;
+}
+async function loadRead(){
+  const v = await Store.get("app:read");
+  READ = new Set(Array.isArray(v) ? v.map(String) : []);
+}
+async function markRead(ids){
+  ids.forEach(id => READ.add(String(id)));
+  // 既読の記録は増え続けるので、今あるお知らせに無いidは捨てる
+  const alive = new Set(notices().map(n => String(n.id)));
+  await Store.set("app:read", [...READ].filter(id => alive.has(id)));
+  updateBadge();
+}
+function fmtAt(s){
+  const m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+  if (!m) return esc(s);
+  const d = new Date(+m[1], +m[2]-1, +m[3]);
+  const diff = Math.round((today0() - d) / 86400000);
+  const hm = m[4] ? ` ${m[4]}:${m[5]}` : "";
+  return (diff === 0 ? "今日" : diff === 1 ? "昨日" : `${+m[2]}/${+m[3]}(${WD[d.getDay()]})`) + hm;
+}
+
+function renderNotices(){
+  const el = document.getElementById("v-notices");
+  const list = notices();
+  let h = staleBanner();
+  if (!list.length){
+    el.innerHTML = h + `<div class="banner info">お知らせはまだありません。<br>
+      フォーム未記入・同行者の記入漏れ・駐車が2台になる日が、ここに届きます（毎朝8時と9時のチェック）。</div>`;
+    return;
+  }
+  h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
+  list.forEach(n => {
+    const id = String(n.id);
+    const unread = !READ.has(id);
+    const icon = KIND_ICON[n.kind] || "ℹ️";
+    const title = String(n.title || "");
+    const showIcon = !/^[←-⯿\u{1F000}-\u{1FFFF}]/u.test(title);
+    h += `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
+      <div class="n-at">${fmtAt(n.at)}</div>
+      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}</div>
+      ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
+      <div class="n-act">
+        ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
+        ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">🔗 登録リンクを開く</a>` : ""}
+        ${unread ? `<button data-read="${esc(id)}">既読にする</button>` : ""}
+      </div></div>`;
+  });
+  el.innerHTML = h;
+
+  const allBtn = document.getElementById("n-allread");
+  if (allBtn) allBtn.onclick = async () => { await markRead(list.map(n => n.id)); renderNotices(); };
+  el.querySelectorAll("[data-read]").forEach(b => b.onclick = async () => { await markRead([b.dataset.read]); renderNotices(); });
+  el.querySelectorAll("[data-go]").forEach(b => b.onclick = async () => {
+    const id = b.closest(".ntc").dataset.id;
+    await markRead([id]);
+    const d = parseYmd(b.dataset.go);
+    if (d){ curMonth = startOfMonth(d); selDay = ymd(d); renderCal(); showTab("cal"); }
+  });
+}
+
+/* =========================================================
    その他タブ
    ========================================================= */
 function renderEtc(){
@@ -430,7 +530,14 @@ function staleBanner(){
           （最終更新 ${esc(DATA.updated)}）。たかさんに連絡してください。</div>`;
 }
 
-function renderAll(){ renderCal(); renderList(); renderEtc(); }
+function renderAll(){ renderCal(); renderList(); renderNotices(); renderEtc(); updateBadge(); }
+
+function showTab(name){
+  document.querySelectorAll("nav.tabs a").forEach(x => x.classList.toggle("on", x.dataset.tab === name));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("on"));
+  document.getElementById("v-" + name).classList.add("on");
+  window.scrollTo(0,0);
+}
 
 function setSub(text){ document.getElementById("sub").textContent = text; }
 
@@ -482,21 +589,17 @@ function renderSetup(msg){
 }
 
 document.querySelectorAll("nav.tabs a[data-tab]").forEach(a => {
-  a.onclick = (ev) => {
-    ev.preventDefault();
-    document.querySelectorAll("nav.tabs a").forEach(x => x.classList.remove("on"));
-    a.classList.add("on");
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("on"));
-    document.getElementById("v-" + a.dataset.tab).classList.add("on");
-    window.scrollTo(0,0);
-  };
+  a.onclick = (ev) => { ev.preventDefault(); showTab(a.dataset.tab); };
 });
 document.getElementById("reload").onclick = refresh;
 
-// 前回の内容があれば先に出す（通信を待たせない）
-const c = RocoApi.cached();
-if (c) { DATA = c; renderAll(); }
-refresh();
+// 前回の内容があれば先に出す（通信を待たせない）。既読の記録を読んでから描く
+(async () => {
+  await loadRead();
+  const c = RocoApi.cached();
+  if (c) { DATA = Object.assign({ notices:[] }, c); renderAll(); }
+  refresh();
+})();
 </script>
 </body>
 </html>

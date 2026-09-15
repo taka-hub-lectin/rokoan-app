@@ -78,6 +78,7 @@
         updated: j.updated || "",
         rows: Array.isArray(j.rows) ? j.rows : [],
         notes: Array.isArray(j.notes) ? j.notes : [],
+        notices: Array.isArray(j.notices) ? j.notices : [],   // 🔔お知らせ（メールの代わり）
         fetchedAt: j.fetchedAt || new Date().toISOString(),
       };
       Store.set(K_CACHE, data);
