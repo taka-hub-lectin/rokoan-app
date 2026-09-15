@@ -234,6 +234,15 @@ function ymd(d){
 function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
 function today0(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+/** 窓口が返す "yyyy-MM-dd HH:mm[:ss]" は日本時間。端末の時間帯に関係なくJSTとして読む */
+function parseJst(s){
+  const m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], (+m[4]||0) - 9, +m[5]||0, +m[6]||0));
+}
+/** 日本時間の「今日」の y/m/d */
+function jstToday(){ const t = new Date(Date.now() + 9*3600000); return { y:t.getUTCFullYear(), m:t.getUTCMonth()+1, d:t.getUTCDate() }; }
+
 function fmtMD(s){
   const d = parseYmd(s); if(!d) return s||"";
   return (d.getMonth()+1) + "/" + d.getDate() + "(" + WD[d.getDay()] + ")";
@@ -425,6 +434,7 @@ async function loadRead(){
   READ = new Set(Array.isArray(v) ? v.map(String) : []);
 }
 async function markRead(ids){
+  await loadRead();   // 別のタブが先に既読にした分を消さないよう、保存の直前に読み直す
   ids.forEach(id => READ.add(String(id)));
   // 既読の記録は増え続けるので、今あるお知らせに無いidは捨てる
   const alive = new Set(notices().map(n => String(n.id)));
@@ -434,19 +444,26 @@ async function markRead(ids){
 function fmtAt(s){
   const m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
   if (!m) return esc(s);
-  const d = new Date(+m[1], +m[2]-1, +m[3]);
-  const diff = Math.round((today0() - d) / 86400000);
+  const t = jstToday();
+  const dayNum = (y,mo,d) => Math.round(Date.UTC(y,mo-1,d)/86400000);
+  const diff = dayNum(t.y,t.m,t.d) - dayNum(+m[1],+m[2],+m[3]);
+  const wd = WD[new Date(Date.UTC(+m[1], +m[2]-1, +m[3])).getUTCDay()];
   const hm = m[4] ? ` ${m[4]}:${m[5]}` : "";
-  return (diff === 0 ? "今日" : diff === 1 ? "昨日" : `${+m[2]}/${+m[3]}(${WD[d.getDay()]})`) + hm;
+  return (diff === 0 ? "今日" : diff === 1 ? "昨日" : `${+m[2]}/${+m[3]}(${wd})`) + hm;
 }
 
 function renderNotices(){
   const el = document.getElementById("v-notices");
   const list = notices();
   let h = staleBanner();
+  if (DATA.noticesMissing){
+    h += `<div class="banner wait">お知らせが取れていません（窓口が古いままの可能性）。前回の内容を表示しています。</div>`;
+  } else if (!list.length && !DATA.noticesUpdated){
+    h += `<div class="banner wait">お知らせのデータが読めていません。「まだ無い」のではなく、取れていない状態です。たかさんに連絡してください。</div>`;
+  }
   if (!list.length){
-    el.innerHTML = h + `<div class="banner info">お知らせはまだありません。<br>
-      フォーム未記入・同行者の記入漏れ・駐車が2台になる日が、ここに届きます（毎朝8時と9時のチェック）。</div>`;
+    el.innerHTML = h + (DATA.noticesUpdated ? `<div class="banner info">お知らせはまだありません。<br>
+      フォーム未記入・同行者の記入漏れ・駐車が2台になる日が、ここに届きます（毎朝8時と9時のチェック）。</div>` : "");
     return;
   }
   h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
@@ -511,15 +528,22 @@ function renderEtc(){
  *   "Tue Sep 15 2026 …" の形で届いて、この判定が静かに外れていた）
  */
 function staleBanner(){
-  if (!DATA.updated) return "";
-  const m = String(DATA.updated).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
-  if (!m) return `<div class="banner wait">最終更新の日時が読めませんでした
+  let h = "";
+  if (DATA.updated){
+    const t = parseJst(DATA.updated);   // 端末の時間帯に関係なくJSTで読む（海外設定の端末で警告が遅れない）
+    if (!t) h += `<div class="banner wait">最終更新の日時が読めませんでした
           （${esc(DATA.updated)}）。止まっていないかの確認ができていません。</div>`;
-  const t = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
-  const hrs = (Date.now() - t.getTime()) / 3600000;
-  if (hrs < STALE_HOURS) return "";
-  return `<div class="banner warn">自動チェックが${Math.floor(hrs/24)}日以上止まっています
+    else {
+      const hrs = (Date.now() - t.getTime()) / 3600000;
+      if (hrs >= STALE_HOURS) h += `<div class="banner warn">自動チェックが${Math.floor(hrs/24)}日以上止まっています
           （最終更新 ${esc(DATA.updated)}）。たかさんに連絡してください。</div>`;
+    }
+  }
+  // Airbnbの予約との照合に失敗した回の一覧は、フォーム未記入の予約が抜けている。
+  // 一覧そのものは新しい日時で出るので、ここで言わないと「全部そろっている」ように見える。
+  if (DATA.airbnbError) h += `<div class="banner warn">Airbnbの予約との照合に失敗しています。
+          フォーム未記入の予約がカレンダーに出ていないかもしれません。たかさんに連絡してください。</div>`;
+  return h;
 }
 
 function renderAll(){ renderCal(); renderList(); renderNotices(); renderEtc(); updateBadge(); }
@@ -533,8 +557,12 @@ function showTab(name){
 
 function setSub(text){ document.getElementById("sub").textContent = text; }
 
+let lastFetchAt = 0;
+const REFETCH_AFTER_MS = 5 * 60 * 1000;   // 開きっぱなしの端末でも、5分以上たっていれば取り直す
+
 async function refresh(){
   setSub("読み込み中…");
+  lastFetchAt = Date.now();
   const res = await RocoApi.load();
   if (res.data) { DATA = res.data; }
 
@@ -581,9 +609,13 @@ function renderSetup(msg){
 }
 
 document.querySelectorAll("nav.tabs a[data-tab]").forEach(a => {
-  a.onclick = (ev) => { ev.preventDefault(); showTab(a.dataset.tab); };
+  a.onclick = (ev) => { ev.preventDefault(); showTab(a.dataset.tab); refreshIfOld(); };
 });
 document.getElementById("reload").onclick = refresh;
+// 7時台に開いたまま8時・9時の通知を過ぎても、画面に戻ったときやタブを押したときに取り直す
+function refreshIfOld(){ if (Date.now() - lastFetchAt > REFETCH_AFTER_MS) refresh(); }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfOld(); });
+window.addEventListener("focus", refreshIfOld);
 
 // 前回の内容があれば先に出す（通信を待たせない）。既読の記録を読んでから描く
 (async () => {

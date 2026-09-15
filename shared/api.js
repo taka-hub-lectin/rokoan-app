@@ -74,11 +74,16 @@
       if (!j || j.ok !== true) {
         return { ok: false, error: (j && j.error) || "denied", data: cached() };
       }
+      const prev = cached() || {};
       const data = {
         updated: j.updated || "",
         rows: Array.isArray(j.rows) ? j.rows : [],
         notes: Array.isArray(j.notes) ? j.notes : [],
-        notices: Array.isArray(j.notices) ? j.notices : [],   // 🔔お知らせ（メールの代わり）
+        // 🔔お知らせ。窓口が notices を返さない（古いデプロイ等）ときは、前回の内容を消さずに残す
+        notices: Array.isArray(j.notices) ? j.notices : (Array.isArray(prev.notices) ? prev.notices : []),
+        noticesUpdated: j.noticesUpdated || "",     // 空＝お知らせのシートが読めていない
+        noticesMissing: !Array.isArray(j.notices),  // 窓口が notices を返していない
+        airbnbError: j.airbnbError || "",           // 空でなければ「Airbnb分が欠けている一覧」
         fetchedAt: j.fetchedAt || new Date().toISOString(),
       };
       Store.set(K_CACHE, data);
