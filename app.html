@@ -19,6 +19,7 @@
     --hanare-bg:#FDEDF5;
     --warn:#D93025;
     --warn-bg:#FCEAE8;
+    --attn:#FFB300;    /* 要対応。赤は⛔ダブルブッキング専用に残す */
     --wait:#C77700;
     --wait-bg:#FFF4E2;
     --tabh:62px;
@@ -80,7 +81,7 @@
      消すと「どちらの棟が困っているか」がカレンダーから読めなくなる。
      斜線＝まだ確定していない／赤い縁＝要対応、として色の上に重ねる。 */
   .bar.ng{background:repeating-linear-gradient(45deg,var(--c) 0 3px,#FFFFFF 3px 6px);}
-  .bar.warn{box-shadow:inset 0 0 0 1.5px var(--warn);}
+  .bar.warn{box-shadow:inset 0 0 0 2px var(--attn);}
   .bar.main{--c:var(--main);}
   .bar.hanare{--c:var(--hanare);}
   .bar.unknown{--c:#B9A26B;}
@@ -310,7 +311,8 @@ function renderCal(){
          <span><i style="background:var(--main)"></i>母屋</span>
          <span><i style="background:var(--hanare)"></i>離れ</span>
          <span><i class="bar ng" style="--c:var(--main)"></i>斜線＝フォーム未記入</span>
-         <span><i class="bar warn" style="--c:var(--main)"></i>赤い縁＝要対応</span>
+         <span><i class="bar warn" style="--c:var(--main)"></i>黄色い縁＝要対応</span>
+         <span><i style="background:var(--warn)"></i>赤い枠＝ダブルブッキング</span>
        </div>
        <div id="daydetail"></div>`;
 
