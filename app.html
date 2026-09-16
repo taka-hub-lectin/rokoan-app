@@ -503,13 +503,20 @@ const QSTATUS_PILL = {
 };
 
 /**
- * 通知(code)に対応する📤送信キューの行を探す。
- * 通常は1件（未決着 or 決着済み）。ごくまれに不備の種類が入れ替わった直後は複数になり得るので、
- * 未決着（承認待ち/要確認）を優先する（既知の簡略化・2026-09-16）。
+ * お知らせの code に対応する📤送信キューの行を探す。
+ * code は「予約コード|不備の種類|節目」の形で、**キューの1行だけを指す**。
+ * 予約コードだけで探すと、節目が進んで新しい行ができたときに古いお知らせも
+ * 新しい行を指してしまい、🔔に同じものが2枚出る（2026-09-17に実際に起きた）。
+ * 古い形式（予約コードだけ）のお知らせは、名簿GAS側の同期で片付けられる。
  */
 function queueFor(code){
-  const items = (DATA.queue || []).filter(q => q.reservationCode === code);
-  return items.find(q => q.status === "承認待ち" || q.status === "要確認") || items[0] || null;
+  const key = String(code || "");
+  const parts = key.split("|");
+  if (parts.length < 3) return null;                 // 古い形式＝もう指す先が無い
+  return (DATA.queue || []).find(q =>
+    String(q.reservationCode) === parts[0] &&
+    String(q.issueType) === parts[1] &&
+    String(q.milestone) === parts[2]) || null;
 }
 
 /** 端末に保存した表示名（承認記録用。本人確認ではない＝既読と同じ「端末ごと」の弱い記録） */
@@ -576,7 +583,8 @@ function renderNotices(){
   const stillPending = (n) => {
     if (n.kind !== "approve") return false;
     const q = queueFor(String(n.code || ""));
-    return !q || q.status === "承認待ち" || q.status === "要確認";
+    // 指す先が無いお知らせ（古い形式・置き換わった分）は「未対応」に居座らせない
+    return !!q && (q.status === "承認待ち" || q.status === "要確認");
   };
   const open = list.filter(n => !READ.has(String(n.id)) || stillPending(n));
   const done = list.filter(n => READ.has(String(n.id)) && !stillPending(n));
@@ -650,11 +658,13 @@ function noticeCardHtml_(n){
 /** 📤送信の承認カード（kind=approve）。文面はお知らせ本文でなく📤送信キューから取る（queueFor） */
 function renderApproveCard_(n, id, unread){
   const q = queueFor(String(n.code || ""));
-  const pill = QSTATUS_PILL[(q && q.status) || "承認待ち"] || QSTATUS_PILL["承認待ち"];
+  const pill = !q ? { cls:"no", label:"― 置き換え済み" }
+             : (QSTATUS_PILL[q.status] || QSTATUS_PILL["承認待ち"]);
   const editable = !!(q && (q.status === "承認待ち" || q.status === "要確認"));
   const text = q ? String(q.editedMessage || q.message || "") : "";
   const box = "qtext-" + String(id).replace(/[^a-zA-Z0-9]/g, "");
-  const code = String(n.code || "");
+  // 送信先の特定はお知らせの文字列でなく、**キューの行そのもの**から取る
+  const code = q ? String(q.reservationCode) : "";
   return `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
       <div class="n-at">${fmtAt(n.at)}</div>
       <div class="n-title">${esc(String(n.title || ""))}</div>
@@ -662,7 +672,7 @@ function renderApproveCard_(n, id, unread){
       <div class="pill ${pill.cls}">${esc(pill.label)}</div>
       ${q
         ? `<textarea class="msgbox" id="${box}" ${editable ? "" : "disabled"}>${esc(text)}</textarea>`
-        : `<div class="n-body">文面を読み込み中です。開き直してください。</div>`}
+        : `<div class="n-body">この案内はもう有効ではありません（新しいお知らせに置き換わっています）。</div>`}
       ${q && !editable && q.decidedBy ? `<div class="n-body">${esc(q.decidedBy)}が対応（${fmtAt(q.decidedAt || "")}）</div>` : ""}
       <div class="n-act">
         ${editable ? `
