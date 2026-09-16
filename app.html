@@ -570,28 +570,24 @@ function renderNotices(){
     return;
   }
   h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
-  list.forEach(n => {
-    const id = String(n.id);
-    const unread = !READ.has(id);
-    const icon = KIND_ICON[n.kind] || "ℹ️";
-    const title = String(n.title || "");
-    const showIcon = !/^[←-⯿\u{1F000}-\u{1FFFF}]/u.test(title);
 
-    if (n.kind === "approve"){
-      h += renderApproveCard_(n, id, unread);
-      return;
-    }
+  // 既読は「対応済み」に畳む。ただし **まだ決着していない📤の承認カードは畳まない**
+  //（既読を押しただけで、承認待ちの案件が隠れてしまうのを防ぐ・2026-09-16）
+  const stillPending = (n) => {
+    if (n.kind !== "approve") return false;
+    const q = queueFor(String(n.code || ""));
+    return !q || q.status === "承認待ち" || q.status === "要確認";
+  };
+  const open = list.filter(n => !READ.has(String(n.id)) || stillPending(n));
+  const done = list.filter(n => READ.has(String(n.id)) && !stillPending(n));
 
-    h += `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
-      <div class="n-at">${fmtAt(n.at)}</div>
-      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}</div>
-      ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
-      <div class="n-act">
-        ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
-        ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">🔗 登録リンクを開く</a>` : ""}
-        ${unread ? `<button data-read="${esc(id)}">既読にする</button>` : ""}
-      </div></div>`;
-  });
+  h += open.length
+    ? open.map(noticeCardHtml_).join("")
+    : `<div class="empty">未対応のお知らせはありません。</div>`;
+  if (done.length){
+    h += `<details><summary>対応済み（${done.length}件）</summary>
+      ${done.map(noticeCardHtml_).join("")}</details>`;
+  }
   el.innerHTML = h;
 
   const allBtn = document.getElementById("n-allread");
@@ -629,6 +625,26 @@ function renderNotices(){
     renderNotices();
     updateBadge();
   });
+}
+
+/** お知らせ1件ぶんのHTML。未対応の一覧と「対応済み」の折りたたみの両方から使う */
+function noticeCardHtml_(n){
+  const id = String(n.id);
+  const unread = !READ.has(id);
+  if (n.kind === "approve") return renderApproveCard_(n, id, unread);
+
+  const icon = KIND_ICON[n.kind] || "ℹ️";
+  const title = String(n.title || "");
+  const showIcon = !/^[←-⯿\u{1F000}-\u{1FFFF}]/u.test(title);
+  return `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
+      <div class="n-at">${fmtAt(n.at)}</div>
+      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}</div>
+      ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
+      <div class="n-act">
+        ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
+        ${n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">🔗 登録リンクを開く</a>` : ""}
+        ${unread ? `<button data-read="${esc(id)}">既読にする</button>` : ""}
+      </div></div>`;
 }
 
 /** 📤送信の承認カード（kind=approve）。文面はお知らせ本文でなく📤送信キューから取る（queueFor） */
