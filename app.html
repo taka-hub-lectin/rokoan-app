@@ -108,6 +108,10 @@
   .c-fac{font-size:12px;font-weight:700;}
   .c-fac.main{color:var(--main);} .c-fac.hanare{color:var(--hanare);} .c-fac.unknown{color:#8A7433;}
   .c-date{font-size:15px;font-weight:700;}
+  /* 予約カードをタップすると、その予約の名簿の行がスプレッドシートで開く */
+  a.card.tapcard{display:block;text-decoration:none;color:inherit;}
+  a.card.tapcard:active{background:#F4F8FC;}
+  .c-go{margin-left:auto;font-size:11px;color:var(--blue);font-weight:700;white-space:nowrap;}
   .c-n{font-size:12px;color:var(--muted);}
   .c-rep{font-size:15px;font-weight:700;margin-top:6px;word-break:break-word;}
   .c-meta{font-size:12px;color:var(--muted);margin-top:3px;}
@@ -378,6 +382,18 @@ function renderDayDetail(){
 /* =========================================================
    予約タブ
    ========================================================= */
+/**
+ * その予約の生データ（名簿の行）へのURL。飛べないときは "" を返す。
+ * 飛べないのは、フォームがまだ来ていない予約（Airbnb・自社予約だけの行）と、
+ * 窓口が古くて sheet を返さないとき。
+ * 行は「📅アプリ用」を書いた時点の位置。名簿は毎朝チェックイン日で並べ替わるが、
+ * 並べ替えと📅アプリ用の書き出しは同じ処理の中で続けて走るので、次の更新まではずれない。
+ */
+function rosterUrl(r){
+  if (!DATA.sheet || !DATA.sheet.roster || !r.row) return "";
+  return `${DATA.sheet.url}#gid=${DATA.sheet.roster}&range=A${r.row}`;
+}
+
 function cardHtml(r){
   const f = facOf(r);
   const k = stStyle(r.status);
@@ -385,16 +401,20 @@ function cardHtml(r){
     r.count !== "" && r.count != null ? r.count + "名" : "",
     r.nats || "",
   ].filter(Boolean).join("・");
-  return `<div class="card ${f.cls}${isPast(r)?" past":""}">
-    <div class="c-top">
+  const url = rosterUrl(r);
+  const inner = `<div class="c-top">
       <span class="c-fac ${f.cls}">${f.label}</span>
       <span class="c-date">${fmtMD(r.ci)} → ${fmtMD(r.co)}</span>
       <span class="c-n">${r.nights ? r.nights + "泊" : ""}</span>
+      ${url ? `<span class="c-go">📝 名簿 ›</span>` : ""}
     </div>
     <div class="c-rep">${accMark(r.access)} ${esc(r.rep)}</div>
     ${meta ? `<div class="c-meta">${esc(meta)}</div>` : ""}
-    <div class="c-st ${k}">${esc(r.status)}</div>
-  </div>`;
+    <div class="c-st ${k}">${esc(r.status)}</div>`;
+  const cls = `card ${f.cls}${isPast(r)?" past":""}${url ? " tapcard" : ""}`;
+  return url
+    ? `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener">${inner}</a>`
+    : `<div class="${cls}">${inner}</div>`;
 }
 
 function renderList(){
