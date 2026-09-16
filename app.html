@@ -437,6 +437,15 @@ function renderList(){
   h += `<details><summary>済んだ予約（${past.length}件）</summary>
         <div style="padding-bottom:10px">${past.length ? past.map(cardHtml).join("") : `<div class="empty">ありません</div>`}</div>
         </details>`;
+  // 旅券・住所・身分証の写真は、アプリには持ってこない。見るときはスプレッドシートへ
+  if (DATA.sheet && DATA.sheet.roster){
+    h += `<a class="link" style="margin-top:14px"
+             href="${esc(DATA.sheet.url)}#gid=${esc(DATA.sheet.roster)}" target="_blank" rel="noopener">
+        <span class="ico">📝</span>
+        <span><span class="t">名簿の生データを開く</span>
+        <span class="d">旅券・住所・身分証の写真はスプレッドシートで</span></span>
+        <span class="ar">›</span></a>`;
+  }
   el.innerHTML = h;
 }
 
@@ -536,11 +545,26 @@ function renderEtc(){
     { i:"✅", t:"清掃の承認", d:"報告された清掃を写真で確認", u:"cleaning-approve.html" },
     { i:"🏠", t:"運営ハブ", d:"これまでのカード一覧", u:"index.html" },
   ];
+  // 生データ（名簿スプレッドシート）へのリンク。URLは窓口から受け取る＝
+  // このリポジトリ（公開）にスプレッドシートのIDを書かないため。
+  // 開けるかどうかはGoogleアカウントの共有設定が決める（リンクを知っただけでは見られない）。
+  const sh = DATA.sheet;
+  const sheetLinks = !sh ? "" :
+    `<div class="sec">スプレッドシート（生データ）</div>`
+    + [
+        { i:"📋", t:"予約ボード", d:"家族が見る一覧。アプリと同じ内容", g:sh.board },
+        { i:"📝", t:"名簿の生データ", d:"旅券・住所・身分証の写真まで（Googleの共有設定で保護）", g:sh.roster },
+      ].filter(x => x.g).map(x => `<a class="link" href="${esc(sh.url)}#gid=${esc(x.g)}" target="_blank" rel="noopener">
+        <span class="ico">${x.i}</span>
+        <span><span class="t">${x.t}</span><span class="d">${x.d}</span></span>
+        <span class="ar">›</span></a>`).join("");
+
   document.getElementById("v-etc").innerHTML =
     items.map(m => `<a class="link" href="${m.u}">
       <span class="ico">${m.i}</span>
       <span><span class="t">${m.t}</span><span class="d">${m.d}</span></span>
       <span class="ar">›</span></a>`).join("")
+    + sheetLinks
     + `<div class="empty" style="margin-top:16px">
          予約データの最終更新: ${esc(DATA.updated || "まだ取得していません")}
        </div>`;

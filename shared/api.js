@@ -84,6 +84,8 @@
         noticesUpdated: j.noticesUpdated || "",     // 空＝お知らせのシートが読めていない
         noticesMissing: !Array.isArray(j.notices),  // 窓口が notices を返していない
         airbnbError: j.airbnbError || "",           // 空でなければ「Airbnb分が欠けている一覧」
+        // 生データ（名簿スプレッドシート）へのリンク。窓口が返さない古いデプロイなら前回の値を残す
+        sheet: (j.sheet && j.sheet.url) ? j.sheet : (prev.sheet || null),
         fetchedAt: j.fetchedAt || new Date().toISOString(),
       };
       Store.set(K_CACHE, data);
