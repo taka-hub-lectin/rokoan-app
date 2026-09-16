@@ -83,6 +83,10 @@
         notices: Array.isArray(j.notices) ? j.notices : (Array.isArray(prev.notices) ? prev.notices : []),
         noticesUpdated: j.noticesUpdated || "",     // 空＝お知らせのシートが読めていない
         noticesMissing: !Array.isArray(j.notices),  // 窓口が notices を返していない
+        // 📤送信キュー（承認待ちの文面と状態）。notices と同じ考え方で、古いデプロイなら前回の内容を残す
+        queue: Array.isArray(j.queue) ? j.queue : (Array.isArray(prev.queue) ? prev.queue : []),
+        queueUpdated: j.queueUpdated || "",
+        queueMissing: !Array.isArray(j.queue),
         airbnbError: j.airbnbError || "",           // 空でなければ「Airbnb分が欠けている一覧」
         // 生データ（名簿スプレッドシート）へのリンク。窓口が返さない古いデプロイなら前回の値を残す
         sheet: (j.sheet && j.sheet.url) ? j.sheet : (prev.sheet || null),
@@ -95,7 +99,35 @@
     }
   }
 
+  /**
+   * 📤送信キューの1件を動かす（承認／修正だけ保存／送らない）。
+   * Content-Type を text/plain にするのは、GASでCORSの事前確認(preflight)を避けるための定番
+   * （shared/store.js の RemoteAdapter案にも同じ注記がある）。
+   * @param {"approve"|"save_edit"|"reject"} action
+   * @param {{reservationCode:string, issueType:string, message?:string, by?:string}} item
+   */
+  async function decide(action, item) {
+    if (!isReady()) return { ok: false, error: "setup" };
+    const body = {
+      k: _key, action,
+      reservationCode: item.reservationCode, issueType: item.issueType,
+      message: item.message || "", by: item.by || "",
+    };
+    try {
+      const r = await fetch(apiUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) return { ok: false, error: "http_" + r.status };
+      try { return await r.json(); }
+      catch (e) { return { ok: false, error: "not_json" }; }
+    } catch (e) {
+      return { ok: false, error: "offline" };
+    }
+  }
+
   adoptFromHash();
 
-  window.RocoApi = { load, cached, setKey, setApiUrl, key, apiUrl, isReady };
+  window.RocoApi = { load, cached, setKey, setApiUrl, key, apiUrl, isReady, decide };
 })();

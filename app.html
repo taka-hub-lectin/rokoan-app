@@ -153,6 +153,22 @@
     font-size:13px;font-family:inherit;text-decoration:none;color:var(--blue-deep);
     background:#EAF2F9;border:0;border-radius:99px;padding:6px 12px;
   }
+  .ntc .n-act button.primary{background:var(--blue-deep);color:#fff;font-weight:700;}
+  .ntc .n-act button.danger{background:var(--warn-bg);color:var(--warn);}
+  .ntc .n-act button:disabled{opacity:.55;}
+  .ntc .msgbox{
+    width:100%;box-sizing:border-box;margin-top:8px;padding:9px 10px;font-size:13px;
+    font-family:inherit;line-height:1.5;border:1px solid var(--line);border-radius:10px;
+    color:var(--ink);background:#FAFBFC;resize:vertical;min-height:120px;white-space:pre-wrap;
+  }
+  .ntc .msgbox[disabled]{background:var(--card);color:var(--muted);}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;margin-top:6px;}
+  .pill.wait{background:var(--wait-bg);color:var(--wait);}
+  .pill.attn{background:#FFF4D6;color:#8A5A00;}
+  .pill.done{background:var(--done-bg);color:var(--done);}
+  .pill.sent{background:var(--main-bg);color:var(--main);}
+  .pill.no{background:#EEF1F4;color:var(--muted);}
+  .pill.err{background:var(--warn-bg);color:var(--warn);}
   .n-tools{display:flex;justify-content:flex-end;margin:-2px 0 10px;}
   .n-tools button{font-size:12px;font-family:inherit;color:var(--muted);background:none;border:1px solid var(--line);border-radius:99px;padding:5px 11px;}
 
@@ -224,7 +240,7 @@ const FAC = {
 };
 const STALE_HOURS = 26;   // 名簿GASのBOARD_STALE_HOURSと同じ
 
-let DATA = { updated:"", rows:[], notes:[], notices:[] };
+let DATA = { updated:"", rows:[], notes:[], notices:[], queue:[] };
 let READ = new Set();   // 既読のお知らせid（端末ごと・Store "app:read"）
 let curMonth = startOfMonth(new Date());
 let selDay = null;
@@ -474,7 +490,37 @@ function renderList(){
    名簿GASが「📅アプリ用_お知らせ」に1件1行で書いたものを、新しい順に出す。
    既読は端末ごと（家族で共有しない）。バッジ＝未読の数。
    ========================================================= */
-const KIND_ICON = { ng:"⏳", sc:"⚠️", park:"🚗", fail:"🛑", test:"🔔", info:"ℹ️", roster:"📋" };
+const KIND_ICON = { ng:"⏳", sc:"⚠️", park:"🚗", fail:"🛑", test:"🔔", info:"ℹ️", roster:"📋", approve:"📤" };
+
+// 📤送信の承認カード用（送信キュー.js が「📤送信キュー」に書く状態文字列と対応）
+const QSTATUS_PILL = {
+  "承認待ち": { cls:"wait", label:"承認待ち" },
+  "要確認":   { cls:"attn", label:"⚠️ 要確認" },
+  "承認済み": { cls:"done", label:"✅ 承認済み" },
+  "送信済み": { cls:"sent", label:"📨 送信済み" },
+  "送信不要": { cls:"no",   label:"送信不要" },
+  "エラー":   { cls:"err",  label:"⚠️ エラー" },
+};
+
+/**
+ * 通知(code)に対応する📤送信キューの行を探す。
+ * 通常は1件（未決着 or 決着済み）。ごくまれに不備の種類が入れ替わった直後は複数になり得るので、
+ * 未決着（承認待ち/要確認）を優先する（既知の簡略化・2026-09-16）。
+ */
+function queueFor(code){
+  const items = (DATA.queue || []).filter(q => q.reservationCode === code);
+  return items.find(q => q.status === "承認待ち" || q.status === "要確認") || items[0] || null;
+}
+
+/** 端末に保存した表示名（承認記録用。本人確認ではない＝既読と同じ「端末ごと」の弱い記録） */
+async function myName(){
+  let n = await Store.get("app:name");
+  if (!n){
+    n = (prompt("お名前を入力してください（承認・送信操作の記録に使います）") || "").trim().slice(0, 20);
+    if (n) await Store.set("app:name", n);
+  }
+  return n || "";
+}
 
 function notices(){
   return (DATA.notices || []).slice().sort((a,b) => String(b.at).localeCompare(String(a.at)));
@@ -530,6 +576,12 @@ function renderNotices(){
     const icon = KIND_ICON[n.kind] || "ℹ️";
     const title = String(n.title || "");
     const showIcon = !/^[←-⯿\u{1F000}-\u{1FFFF}]/u.test(title);
+
+    if (n.kind === "approve"){
+      h += renderApproveCard_(n, id, unread);
+      return;
+    }
+
     h += `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
       <div class="n-at">${fmtAt(n.at)}</div>
       <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}</div>
@@ -551,6 +603,60 @@ function renderNotices(){
     const d = parseYmd(b.dataset.go);
     if (d){ curMonth = startOfMonth(d); selDay = ymd(d); renderCal(); showTab("cal"); }
   });
+  el.querySelectorAll("[data-qact]").forEach(b => b.onclick = async () => {
+    const action = b.dataset.qact;
+    const reservationCode = b.dataset.code;
+    const issueType = b.dataset.issue;
+    const box = document.getElementById(b.dataset.box);
+    const text = box ? box.value : "";
+    if (action === "reject" && !confirm("このゲストには送りません。よろしいですか？")) return;
+
+    const group = b.closest(".n-act");
+    group.querySelectorAll("button").forEach(x => x.disabled = true);
+    const label = b.textContent;
+    b.textContent = "…処理中";
+
+    const by = await myName();
+    const res = await RocoApi.decide(action, { reservationCode, issueType, message: text, by });
+    if (!res || res.ok !== true){
+      alert("処理できませんでした（" + ((res && res.error) || "不明なエラー") + "）。少し待ってからやり直してください。");
+      group.querySelectorAll("button").forEach(x => x.disabled = false);
+      b.textContent = label;
+      return;
+    }
+    const r = await RocoApi.load();
+    if (r.ok) DATA = r.data;
+    renderNotices();
+    updateBadge();
+  });
+}
+
+/** 📤送信の承認カード（kind=approve）。文面はお知らせ本文でなく📤送信キューから取る（queueFor） */
+function renderApproveCard_(n, id, unread){
+  const q = queueFor(String(n.code || ""));
+  const pill = QSTATUS_PILL[(q && q.status) || "承認待ち"] || QSTATUS_PILL["承認待ち"];
+  const editable = !!(q && (q.status === "承認待ち" || q.status === "要確認"));
+  const text = q ? String(q.editedMessage || q.message || "") : "";
+  const box = "qtext-" + String(id).replace(/[^a-zA-Z0-9]/g, "");
+  const code = String(n.code || "");
+  return `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
+      <div class="n-at">${fmtAt(n.at)}</div>
+      <div class="n-title">${esc(String(n.title || ""))}</div>
+      ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
+      <div class="pill ${pill.cls}">${esc(pill.label)}</div>
+      ${q
+        ? `<textarea class="msgbox" id="${box}" ${editable ? "" : "disabled"}>${esc(text)}</textarea>`
+        : `<div class="n-body">文面を読み込み中です。開き直してください。</div>`}
+      ${q && !editable && q.decidedBy ? `<div class="n-body">${esc(q.decidedBy)}が対応（${fmtAt(q.decidedAt || "")}）</div>` : ""}
+      <div class="n-act">
+        ${editable ? `
+          <button class="primary" data-qact="approve" data-code="${esc(code)}" data-issue="${esc(q.issueType)}" data-box="${box}">✅ 承認</button>
+          <button data-qact="save_edit" data-code="${esc(code)}" data-issue="${esc(q.issueType)}" data-box="${box}">💾 修正だけ保存</button>
+          <button class="danger" data-qact="reject" data-code="${esc(code)}" data-issue="${esc(q.issueType)}" data-box="${box}">🚫 送らない</button>
+        ` : ""}
+        ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
+        ${unread ? `<button data-read="${esc(id)}">既読にする</button>` : ""}
+      </div></div>`;
 }
 
 /* =========================================================
