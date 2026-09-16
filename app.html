@@ -20,6 +20,7 @@
     --warn:#D93025;
     --warn-bg:#FCEAE8;
     --attn:#FFB300;    /* 要対応。赤は⛔ダブルブッキング専用に残す */
+    --park:#8E5FD9;    /* 駐車が2台になる日。赤(ダブルブッキング)・黄(要対応)と別の色にする */
     --wait:#C77700;
     --wait-bg:#FFF4E2;
     --tabh:62px;
@@ -70,6 +71,8 @@
   .cell.today{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue);}
   .cell.sel{border-color:var(--blue-deep);box-shadow:inset 0 0 0 2px var(--blue-deep);}
   .cell.dbl{border-color:var(--warn);box-shadow:inset 0 0 0 2px var(--warn);}
+  .cell.park{border-color:var(--park);box-shadow:inset 0 0 0 2px var(--park);}
+  .cell.dbl.park{box-shadow:inset 0 0 0 2px var(--warn);}  /* 両方重なったら⛔を優先 */
   .dnum{font-size:12px;color:var(--ink);text-align:center;line-height:1.4;}
   .cell.sun .dnum{color:#C5534B;} .cell.sat .dnum{color:#3E72A6;}
   .bars{display:flex;flex-direction:column;gap:2px;margin-top:2px;}
@@ -275,6 +278,24 @@ function dblDays(){
   });
   return set;
 }
+/** 日付 → その日に重なる「駐車が2台になる」注意（無ければ null）。1日に複数あれば先頭を出す */
+function parkNoteOn(dstr){
+  const d = parseYmd(dstr);
+  return DATA.notes.find(n => {
+    if (n.kind !== "parking") return false;
+    const s = parseYmd(n.start), e = parseYmd(n.end);
+    return s && e && d >= s && d < e;
+  }) || null;
+}
+function parkDays(){
+  const set = new Set();
+  DATA.notes.filter(n => n.kind === "parking").forEach(n => {
+    const s = parseYmd(n.start), e = parseYmd(n.end);
+    if (!s || !e) return;
+    for (let d = new Date(s); d < e; d.setDate(d.getDate()+1)) set.add(ymd(d));
+  });
+  return set;
+}
 
 /* =========================================================
    カレンダー
@@ -285,6 +306,7 @@ function renderCal(){
   const start = new Date(first); start.setDate(1 - first.getDay());
   const t0 = ymd(today0());
   const dbl = dblDays();
+  const park = parkDays();
 
   let cells = "";
   for (let i = 0; i < 42; i++){
@@ -302,7 +324,7 @@ function renderCal(){
     }).join("");
 
     cells += `<div class="cell${outOf?" out-of":""}${ds===t0?" today":""}`
-      + `${ds===selDay?" sel":""}${dbl.has(ds)?" dbl":""}`
+      + `${ds===selDay?" sel":""}${dbl.has(ds)?" dbl":""}${park.has(ds)?" park":""}`
       + `${d.getDay()===0?" sun":""}${d.getDay()===6?" sat":""}" data-d="${ds}">`
       + `<div class="dnum">${d.getDate()}</div><div class="bars">${bars}</div></div>`;
   }
@@ -322,6 +344,7 @@ function renderCal(){
          <span><i class="bar ng" style="--c:var(--main)"></i>斜線＝フォーム未記入</span>
          <span><i class="bar warn" style="--c:var(--main)"></i>黄色い縁＝要対応</span>
          <span><i style="background:var(--warn)"></i>赤い枠＝ダブルブッキング</span>
+         <span><i style="background:var(--park)"></i>紫の枠＝駐車が2台になる日</span>
        </div>
        <div id="daydetail"></div>`;
 
@@ -341,7 +364,12 @@ function renderDayDetail(){
   const d = parseYmd(selDay);
 
   let h = `<div class="sec">${d.getMonth()+1}月${d.getDate()}日(${WD[d.getDay()]})</div>`;
-  if (!stays.length) h += `<div class="empty">予定はありません</div>`;
+  const pn = parkNoteOn(selDay);
+  if (pn) h += `<div class="card" style="border-left:4px solid var(--park)">
+      <div class="c-top"><span class="c-fac" style="color:var(--park)">🚗 駐車が2台</span></div>
+      <div class="c-meta">🏠 ${esc(pn.main)}　／　🌿 ${esc(pn.hanare)}</div>
+      ${pn.note ? `<div class="c-st wait">${esc(pn.note)}</div>` : ""}</div>`;
+  if (!stays.length && !pn) h += `<div class="empty">予定はありません</div>`;
   stays.forEach(r => h += cardHtml(r));
   box.innerHTML = h;
   box.scrollIntoView({ behavior:"smooth", block:"nearest" });
