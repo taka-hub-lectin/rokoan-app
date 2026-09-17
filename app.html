@@ -503,20 +503,23 @@ const QSTATUS_PILL = {
 };
 
 /**
- * お知らせの code に対応する📤送信キューの行を探す。
- * code は「予約コード|不備の種類|節目」の形で、**キューの1行だけを指す**。
- * 予約コードだけで探すと、節目が進んで新しい行ができたときに古いお知らせも
- * 新しい行を指してしまい、🔔に同じものが2枚出る（2026-09-17に実際に起きた）。
- * 古い形式（予約コードだけ）のお知らせは、名簿GAS側の同期で片付けられる。
+ * 📤送信キューのうち、いま家族の対応が要るものを **1予約につき1件** にまとめて返す。
+ *
+ * 2026-09-17 たかさん指摘「お知らせが乱立して見にくい」への対応。
+ * それまでは お知らせシートの1行＝カード1枚だったので、節目が進むたびに増え、
+ * さらに毎朝の未記入チェック（⏳・⚠️）とも重なって、同じゲストで最大3〜4枚出ていた。
+ * いまは **お知らせシートを経由せず、キューから直接** 描く（＝増えようがない）。
  */
-function queueFor(code){
-  const key = String(code || "");
-  const parts = key.split("|");
-  if (parts.length < 3) return null;                 // 古い形式＝もう指す先が無い
-  return (DATA.queue || []).find(q =>
-    String(q.reservationCode) === parts[0] &&
-    String(q.issueType) === parts[1] &&
-    String(q.milestone) === parts[2]) || null;
+function pendingQueueItems(){
+  const live = (DATA.queue || []).filter(q => q.status === "承認待ち" || q.status === "要確認");
+  const byCode = {};
+  live.forEach(q => {
+    const k = String(q.reservationCode || "");
+    // 同じ予約に複数あればチェックインに近い節目（数字が小さいほう）を採用する
+    if (!byCode[k] || Number(q.milestone) < Number(byCode[k].milestone)) byCode[k] = q;
+  });
+  return Object.keys(byCode).map(k => byCode[k])
+    .sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
 }
 
 /** 端末に保存した表示名（承認記録用。本人確認ではない＝既読と同じ「端末ごと」の弱い記録） */
@@ -532,7 +535,24 @@ async function myName(){
 function notices(){
   return (DATA.notices || []).slice().sort((a,b) => String(b.at).localeCompare(String(a.at)));
 }
-function unreadCount(){ return notices().filter(n => !READ.has(String(n.id))).length; }
+/**
+ * 画面に出すお知らせ。📤はキューから直接描くので除き、
+ * 📤が出ている予約の⏳・⚠️も隠す（同じ事実を2枚で言わない・2026-09-17）。
+ * **バッジもこの関数を通す**＝画面に無いものを数えない。
+ */
+function visibleNotices(){
+  const covered = {};
+  (DATA.queue || []).forEach(q => { covered[String(q.reservationCode || "")] = true; });
+  return notices().filter(n => {
+    if (n.kind === "approve") return false;
+    if ((n.kind === "ng" || n.kind === "sc") && covered[String(n.code || "")]) return false;
+    return true;
+  });
+}
+function unreadCount(){
+  // 「やることの数」＝画面に出ている未読のお知らせ＋承認待ちの文面
+  return visibleNotices().filter(n => !READ.has(String(n.id))).length + pendingQueueItems().length;
+}
 function updateBadge(){
   const b = document.getElementById("nbadge");
   const c = unreadCount();
@@ -564,37 +584,43 @@ function fmtAt(s){
 
 function renderNotices(){
   const el = document.getElementById("v-notices");
-  const list = notices();
+  const pend = pendingQueueItems();
+  // 📤カードが出ている予約について、毎朝の未記入チェックの⏳・⚠️は隠す。
+  // 同じ事実を2枚で言わない（2026-09-17 たかさん「乱立させないで」）。
+  // 名簿GAS側は一切変えていない＝メールのフォールバックも従来どおり効く。
+  const list = visibleNotices();
+
   let h = staleBanner();
   if (DATA.noticesMissing){
     h += `<div class="banner wait">お知らせが取れていません（窓口が古いままの可能性）。前回の内容を表示しています。</div>`;
-  } else if (!list.length && !DATA.noticesUpdated){
+  } else if (!list.length && !pend.length && !DATA.noticesUpdated){
     h += `<div class="banner wait">お知らせのデータが読めていません。「まだ無い」のではなく、取れていない状態です。たかさんに連絡してください。</div>`;
   }
-  if (!list.length){
+  if (!list.length && !pend.length){
     el.innerHTML = h + (DATA.noticesUpdated ? `<div class="banner info">お知らせはまだありません。<br>
       フォーム未記入・同行者の記入漏れ・駐車が2台になる日が、ここに届きます（毎朝8時と9時のチェック）。</div>` : "");
     return;
   }
-  h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
 
-  // 既読は「対応済み」に畳む。ただし **まだ決着していない📤の承認カードは畳まない**
-  //（既読を押しただけで、承認待ちの案件が隠れてしまうのを防ぐ・2026-09-16）
-  const stillPending = (n) => {
-    if (n.kind !== "approve") return false;
-    const q = queueFor(String(n.code || ""));
-    // 指す先が無いお知らせ（古い形式・置き換わった分）は「未対応」に居座らせない
-    return !!q && (q.status === "承認待ち" || q.status === "要確認");
-  };
-  const open = list.filter(n => !READ.has(String(n.id)) || stillPending(n));
-  const done = list.filter(n => READ.has(String(n.id)) && !stillPending(n));
+  // ① 送る文面の承認（1予約1枚）を最初に
+  if (pend.length){
+    h += `<div class="sec">送る文面の承認（${pend.length}件）</div>`;
+    h += pend.map(approveCardHtml_).join("");
+  }
 
-  h += open.length
-    ? open.map(noticeCardHtml_).join("")
-    : `<div class="empty">未対応のお知らせはありません。</div>`;
-  if (done.length){
-    h += `<details><summary>対応済み（${done.length}件）</summary>
-      ${done.map(noticeCardHtml_).join("")}</details>`;
+  // ② そのほかのお知らせ。既読は「対応済み」に畳む
+  if (list.length){
+    if (pend.length) h += `<div class="sec">そのほかのお知らせ</div>`;
+    h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
+    const open = list.filter(n => !READ.has(String(n.id)));
+    const done = list.filter(n => READ.has(String(n.id)));
+    h += open.length
+      ? open.map(noticeCardHtml_).join("")
+      : `<div class="empty">未対応のお知らせはありません。</div>`;
+    if (done.length){
+      h += `<details><summary>対応済み（${done.length}件）</summary>
+        ${done.map(noticeCardHtml_).join("")}</details>`;
+    }
   }
   el.innerHTML = h;
 
@@ -655,33 +681,31 @@ function noticeCardHtml_(n){
       </div></div>`;
 }
 
-/** 📤送信の承認カード（kind=approve）。文面はお知らせ本文でなく📤送信キューから取る（queueFor） */
-function renderApproveCard_(n, id, unread){
-  const q = queueFor(String(n.code || ""));
-  const pill = !q ? { cls:"no", label:"― 置き換え済み" }
-             : (QSTATUS_PILL[q.status] || QSTATUS_PILL["承認待ち"]);
-  const editable = !!(q && (q.status === "承認待ち" || q.status === "要確認"));
-  const text = q ? String(q.editedMessage || q.message || "") : "";
-  const box = "qtext-" + String(id).replace(/[^a-zA-Z0-9]/g, "");
-  // 送信先の特定はお知らせの文字列でなく、**キューの行そのもの**から取る
-  const code = q ? String(q.reservationCode) : "";
-  return `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
-      <div class="n-at">${fmtAt(n.at)}</div>
-      <div class="n-title">${esc(String(n.title || ""))}</div>
-      ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
+/**
+ * 📤送る文面の承認カード。**キューの1行から直接**描く（お知らせシートは経由しない）。
+ * 1予約につき1枚しか出ない（pendingQueueItems がまとめている）。
+ */
+function approveCardHtml_(q){
+  const pill = QSTATUS_PILL[q.status] || QSTATUS_PILL["承認待ち"];
+  const text = String(q.editedMessage || q.message || "");
+  const box = "qtext-" + String(q.id || q.reservationCode).replace(/[^a-zA-Z0-9]/g, "");
+  const fac = FAC[q.fkey] || { short: q.fkey === "whole" ? "全棟" : "施設不明", cls: "unknown" };
+  const ms = { 7: "1週間前", 3: "3日前", 1: "前日" }[Number(q.milestone)] || "";
+  const kind = q.issueType === "unregistered" ? "名簿が未記入" : "名簿に不備";
+  const probs = String(q.problems || "").split(" / ").filter(x => x);
+
+  return `<div class="card ntc ${esc(fac.cls)}" data-id="${esc(String(q.id || ""))}">
+      <div class="n-at">${ms ? esc(ms) + "・" : ""}${esc(String(q.checkIn || ""))} IN</div>
+      <div class="n-title">${esc(fac.short)}　${esc(String(q.guestName || ""))}様</div>
+      <div class="n-body">${esc(kind)}${probs.length ? "：" + esc(probs.join("／")) : ""}</div>
       <div class="pill ${pill.cls}">${esc(pill.label)}</div>
-      ${q
-        ? `<textarea class="msgbox" id="${box}" ${editable ? "" : "disabled"}>${esc(text)}</textarea>`
-        : `<div class="n-body">この案内はもう有効ではありません（新しいお知らせに置き換わっています）。</div>`}
-      ${q && !editable && q.decidedBy ? `<div class="n-body">${esc(q.decidedBy)}が対応（${fmtAt(q.decidedAt || "")}）</div>` : ""}
+      ${q.note ? `<div class="n-body" style="color:var(--wait)">${esc(String(q.note))}</div>` : ""}
+      <textarea class="msgbox" id="${box}">${esc(text)}</textarea>
       <div class="n-act">
-        ${editable ? `
-          <button class="primary" data-qact="approve" data-code="${esc(code)}" data-issue="${esc(q.issueType)}" data-box="${box}">✅ 承認</button>
-          <button data-qact="save_edit" data-code="${esc(code)}" data-issue="${esc(q.issueType)}" data-box="${box}">💾 修正だけ保存</button>
-          <button class="danger" data-qact="reject" data-code="${esc(code)}" data-issue="${esc(q.issueType)}" data-box="${box}">🚫 送らない</button>
-        ` : ""}
-        ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
-        ${unread ? `<button data-read="${esc(id)}">既読にする</button>` : ""}
+        <button class="primary" data-qact="approve" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">✅ 承認</button>
+        <button data-qact="save_edit" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">💾 修正だけ保存</button>
+        <button class="danger" data-qact="reject" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">🚫 送らない</button>
+        ${q.checkIn ? `<button data-go="${esc(String(q.checkIn))}">📅 その日を見る</button>` : ""}
       </div></div>`;
 }
 
