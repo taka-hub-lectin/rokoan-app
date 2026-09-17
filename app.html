@@ -108,9 +108,9 @@
   .c-fac{font-size:12px;font-weight:700;}
   .c-fac.main{color:var(--main);} .c-fac.hanare{color:var(--hanare);} .c-fac.unknown{color:#8A7433;}
   .c-date{font-size:15px;font-weight:700;}
-  /* 予約カードをタップすると、その予約の名簿の行がスプレッドシートで開く */
-  a.card.tapcard{display:block;text-decoration:none;color:inherit;}
-  a.card.tapcard:active{background:#F4F8FC;}
+  /* 予約カードをタップすると「予約の詳細」が下から出る（名簿へ飛ぶかはそこで選ぶ） */
+  .card.tapcard{cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .card.tapcard:active{background:#F4F8FC;}
   .c-go{margin-left:auto;font-size:11px;color:var(--blue);font-weight:700;white-space:nowrap;}
   .c-n{font-size:12px;color:var(--muted);}
   .c-rep{font-size:15px;font-weight:700;margin-top:6px;word-break:break-word;}
@@ -121,6 +121,45 @@
 
   details{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:2px 13px;margin-top:14px;}
   summary{padding:11px 0;font-size:14px;font-weight:700;cursor:pointer;}
+
+  /* ---- 予約の詳細（下から出るシート） ---- */
+  /* カードをタップしたら、いきなり名簿へ飛ばさずにここで中身を見せる。
+     名簿（旅券・住所・写真）へ行くかどうかは、見てから選んでもらう（2026-09-18 たかさん指示）。 */
+  .sh-bg{
+    position:fixed;inset:0;z-index:40;background:rgba(20,30,40,.42);
+    opacity:0;transition:opacity .18s;
+  }
+  .sh-bg.on{opacity:1;}
+  .sh{
+    position:fixed;left:0;right:0;bottom:0;z-index:41;
+    max-width:680px;margin:0 auto;background:var(--card);
+    border-radius:18px 18px 0 0;box-shadow:0 -6px 28px rgba(20,30,40,.25);
+    max-height:86vh;overflow-y:auto;
+    padding:0 16px calc(16px + env(safe-area-inset-bottom,0));
+    transform:translateY(100%);transition:transform .2s ease-out;
+  }
+  .sh.on{transform:translateY(0);}
+  .sh[hidden],.sh-bg[hidden]{display:none;}
+  .sh-grip{width:38px;height:4px;border-radius:99px;background:#D6DCE2;margin:9px auto 4px;}
+  .sh-head{position:sticky;top:0;background:var(--card);padding:4px 0 10px;border-bottom:1px solid var(--line);}
+  .sh-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .sh-rep{font-size:19px;font-weight:700;margin-top:6px;word-break:break-word;}
+  .sh-rows{margin:4px 0 0;}
+  .sh-r{display:flex;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line);}
+  .sh-r .k{flex:none;width:96px;font-size:13px;color:var(--muted);}
+  .sh-r .v{flex:1;font-size:15px;line-height:1.5;word-break:break-word;}
+  .sh-r .v.ng{color:var(--warn);font-weight:700;}
+  .sh-r .v.wait{color:var(--wait);}
+  .sh-r.attn{background:#FFFBF0;border-radius:8px;}
+  .sh-none{font-size:13px;color:var(--muted);padding:12px 2px;line-height:1.6;}
+  .sh-act{display:flex;gap:9px;margin-top:16px;}
+  .sh-act a,.sh-act button{
+    flex:1;text-align:center;text-decoration:none;font-family:inherit;font-size:15px;
+    padding:14px 10px;border-radius:12px;border:0;font-weight:700;
+  }
+  .sh-act a{background:var(--blue-deep);color:#fff;}
+  .sh-act button{background:#EEF1F4;color:var(--ink);}
+  .sh-note{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.6;text-align:center;}
 
   /* ---- タブ ---- */
   nav.tabs{
@@ -214,6 +253,9 @@
   <div class="view" id="v-notices"></div>
   <div class="view" id="v-etc"></div>
 </main>
+
+<div class="sh-bg" id="dbg" hidden></div>
+<div class="sh" id="dsheet" hidden role="dialog" aria-modal="true" aria-label="予約の詳細"></div>
 
 <nav class="tabs">
   <a href="#" data-tab="cal" class="on"><span class="ic">📅</span>カレンダー</a>
@@ -410,6 +452,20 @@ function rosterUrl(r){
   return `${DATA.sheet.url}#gid=${DATA.sheet.roster}&range=A${r.row}`;
 }
 
+/**
+ * チェックイン時間を "HH:mm" にする。
+ * 名簿GASは先頭に ' を付けて文字として書いているので、ふつうは "18:00" のまま来る。
+ * それでも、どこかで時刻値に化けた場合（"1899-12-30 18:00:00"）や ' が残った場合に
+ * 画面が壊れないよう、ここでも読み直す（→名簿の日付まわりで3回やらかしている）。
+ * 読めない書き方（「夕方ごろ」）は書かれたまま出す＝勝手に消さない。
+ */
+function fmtTime(v){
+  const s = String(v==null?"":v).replace(/^'/,"").trim();
+  if (!s) return "";
+  const m = s.match(/(\d{1,2}):(\d{2})/);
+  return m ? String(+m[1]).padStart(2,"0") + ":" + m[2] : s;
+}
+
 function cardHtml(r){
   const f = facOf(r);
   const k = stStyle(r.status);
@@ -417,22 +473,123 @@ function cardHtml(r){
     r.count !== "" && r.count != null ? r.count + "名" : "",
     r.nats || "",
   ].filter(Boolean).join("・");
-  const url = rosterUrl(r);
-  const inner = `<div class="c-top">
+  // カードは「詳細」を開くだけ。名簿（旅券・住所・写真）へ行くかは詳細を見てから選ぶ。
+  const i = DATA.rows.indexOf(r);
+  return `<div class="card ${f.cls}${isPast(r)?" past":""} tapcard" data-i="${i}">
+    <div class="c-top">
       <span class="c-fac ${f.cls}">${f.label}</span>
       <span class="c-date">${fmtMD(r.ci)} → ${fmtMD(r.co)}</span>
       <span class="c-n">${r.nights ? r.nights + "泊" : ""}</span>
-      ${url ? `<span class="c-go">📝 名簿 ›</span>` : ""}
+      <span class="c-go">詳細 ›</span>
     </div>
     <div class="c-rep">${accMark(r.access)} ${esc(r.rep)}</div>
     ${meta ? `<div class="c-meta">${esc(meta)}</div>` : ""}
     ${r.rooms ? `<div class="c-meta">🛏 ${esc(r.rooms)}</div>` : ""}
-    <div class="c-st ${k}">${esc(r.status)}</div>`;
-  const cls = `card ${f.cls}${isPast(r)?" past":""}${url ? " tapcard" : ""}`;
-  return url
-    ? `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener">${inner}</a>`
-    : `<div class="${cls}">${inner}</div>`;
+    <div class="c-st ${k}">${esc(r.status)}</div>
+  </div>`;
 }
+
+/* =========================================================
+   予約の詳細（下から出るシート）
+   アンケートで聞き取った項目のうち、家族の対応が要るものだけを出す
+   （チェックイン時間・ベッド・部屋割り・ベビー用品）。2026-09-18 たかさん確定。
+   前泊地・行先地は出さない。旅券・住所・身分証の写真はそもそもアプリに来ていない。
+   ========================================================= */
+let detailOpen = false;
+
+/** その予約の期間にかかる注意（駐車が2台・ダブルブッキング）を拾う */
+function notesFor(r){
+  const ci = parseYmd(r.ci), co = parseYmd(r.co);
+  if (!ci) return [];
+  const end = co || new Date(ci.getTime() + 86400000);
+  return DATA.notes.filter(n => {
+    const s = parseYmd(n.start), e = parseYmd(n.end);
+    return s && e && s < end && ci < e;
+  });
+}
+
+function detailHtml(r){
+  const f = facOf(r);
+  const url = rosterUrl(r);
+  const row = (k, v, cls) => v ? `<div class="sh-r"><div class="k">${k}</div><div class="v ${cls||""}">${esc(v)}</div></div>` : "";
+
+  const people = [
+    r.count !== "" && r.count != null ? r.count + "名" : "",
+    r.nats || "",
+  ].filter(Boolean).join("・");
+
+  // 聞き取り項目。回答が無いものは行ごと出さない（空欄を並べない）
+  const survey = row("⏰ 到着", fmtTime(r.ciTime))
+               + row("🛏 ベッド", r.bed)
+               + row("🛏 部屋割り", r.rooms)
+               + row("🍼 ベビー用品", r.baby);
+
+  const notes = notesFor(r).map(n => n.kind === "double"
+    ? `<div class="sh-r attn"><div class="k">⛔ 注意</div><div class="v ng">${esc(n.note)}</div></div>`
+    : `<div class="sh-r attn"><div class="k">🚗 駐車</div><div class="v wait">${fmtMD(n.start)}〜${fmtMD(n.end)} は2台になります（🏠 ${esc(n.main)}／🌿 ${esc(n.hanare)}）</div></div>`
+  ).join("");
+
+  return `<div class="sh-grip"></div>
+    <div class="sh-head">
+      <div class="sh-top">
+        <span class="c-fac ${f.cls}">${f.label}</span>
+        <span class="c-date">${fmtMD(r.ci)} → ${fmtMD(r.co)}</span>
+        <span class="c-n">${r.nights ? r.nights + "泊" : ""}</span>
+      </div>
+      <div class="sh-rep">${accMark(r.access)} ${esc(r.rep)}</div>
+    </div>
+    <div class="sh-rows">
+      ${row("👥 人数", people)}
+      ${survey}
+      ${row("📋 状態", r.status, stStyle(r.status))}
+      ${notes}
+    </div>
+    ${survey ? "" : `<div class="sh-none">ご希望（到着時間・ベッド・部屋割り・ベビー用品）の記入はありません。</div>`}
+    <div class="sh-act">
+      ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">📝 名簿を開く</a>` : ""}
+      <button type="button" id="d-close">閉じる</button>
+    </div>
+    ${url ? `<div class="sh-note">旅券・住所・身分証の写真は名簿（スプレッドシート）で見られます</div>`
+          : `<div class="sh-note">この予約はまだ名簿に記入がないので、開ける行がありません</div>`}`;
+}
+
+function openDetail(i){
+  const r = DATA.rows[i];
+  if (!r) return;
+  const sh = document.getElementById("dsheet"), bg = document.getElementById("dbg");
+  sh.innerHTML = detailHtml(r);
+  sh.hidden = false; bg.hidden = false;
+  requestAnimationFrame(() => { sh.classList.add("on"); bg.classList.add("on"); });
+  document.body.style.overflow = "hidden";
+  sh.scrollTop = 0;
+  document.getElementById("d-close").onclick = closeDetail;
+  if (!detailOpen) history.pushState({ detail:true }, "");   // 端末の「戻る」で閉じる
+  detailOpen = true;
+}
+
+/** 実際に閉じる（popstate から呼ばれる。履歴は動かさない） */
+function hideDetail(){
+  if (!detailOpen) return;
+  detailOpen = false;
+  const sh = document.getElementById("dsheet"), bg = document.getElementById("dbg");
+  sh.classList.remove("on"); bg.classList.remove("on");
+  document.body.style.overflow = "";
+  setTimeout(() => { if (!detailOpen) { sh.hidden = true; bg.hidden = true; sh.innerHTML = ""; } }, 200);
+}
+
+/** 閉じるボタン・背景タップ。履歴を1つ戻して popstate → hideDetail に流す */
+function closeDetail(){
+  if (detailOpen) history.back(); else hideDetail();
+}
+
+document.getElementById("dbg").onclick = closeDetail;
+window.addEventListener("popstate", hideDetail);
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeDetail(); });
+// カードは描き直されるので、1か所でまとめて受ける
+document.querySelector("main").addEventListener("click", (ev) => {
+  const card = ev.target.closest(".tapcard");
+  if (card) openDetail(+card.dataset.i);
+});
 
 function renderList(){
   const el = document.getElementById("v-list");
