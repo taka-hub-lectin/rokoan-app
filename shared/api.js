@@ -104,12 +104,13 @@
    * Content-Type を text/plain にするのは、GASでCORSの事前確認(preflight)を避けるための定番
    * （shared/store.js の RemoteAdapter案にも同じ注記がある）。
    * @param {"approve"|"save_edit"|"reject"} action
-   * @param {{reservationCode:string, issueType:string, message?:string, by?:string}} item
+   * @param {{id?:string, reservationCode:string, issueType:string, message?:string, by?:string}} item
    */
   async function decide(action, item) {
     if (!isReady()) return { ok: false, error: "setup" };
     const body = {
       k: _key, action,
+      id: item.id || "",                     // 行のid（あれば窓口はこれで1行に決める）
       reservationCode: item.reservationCode, issueType: item.issueType,
       message: item.message || "", by: item.by || "",
     };

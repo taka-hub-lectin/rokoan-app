@@ -541,8 +541,11 @@ function notices(){
  * **バッジもこの関数を通す**＝画面に無いものを数えない。
  */
 function visibleNotices(){
+  // 「📤で面倒を見ている」予約だけ⏳を隠す。エラーや送らないで終わった予約は
+  // 誰も面倒を見ていないので、毎朝の⏳をそのまま出す（隠すと当日まで誰も気づけない）。
+  const COVERING = { "承認待ち": 1, "要確認": 1, "承認済み": 1, "送信済み": 1 };
   const covered = {};
-  (DATA.queue || []).forEach(q => { covered[String(q.reservationCode || "")] = true; });
+  (DATA.queue || []).forEach(q => { if (COVERING[q.status]) covered[String(q.reservationCode || "")] = true; });
   return notices().filter(n => {
     if (n.kind === "approve") return false;
     if ((n.kind === "ng" || n.kind === "sc") && covered[String(n.code || "")]) return false;
@@ -591,6 +594,9 @@ function renderNotices(){
   const list = visibleNotices();
 
   let h = staleBanner();
+  if (DATA.queueMissing){
+    h += `<div class="banner wait">承認待ちの文面が取れていません（窓口が古いままの可能性）。前回の内容を表示しています。たかさんに連絡してください。</div>`;
+  }
   if (DATA.noticesMissing){
     h += `<div class="banner wait">お知らせが取れていません（窓口が古いままの可能性）。前回の内容を表示しています。</div>`;
   } else if (!list.length && !pend.length && !DATA.noticesUpdated){
@@ -635,6 +641,7 @@ function renderNotices(){
   });
   el.querySelectorAll("[data-qact]").forEach(b => b.onclick = async () => {
     const action = b.dataset.qact;
+    const id = b.dataset.qid || "";          // 行のid。節目ごとに行が分かれても取り違えない
     const reservationCode = b.dataset.code;
     const issueType = b.dataset.issue;
     const box = document.getElementById(b.dataset.box);
@@ -647,7 +654,7 @@ function renderNotices(){
     b.textContent = "…処理中";
 
     const by = await myName();
-    const res = await RocoApi.decide(action, { reservationCode, issueType, message: text, by });
+    const res = await RocoApi.decide(action, { id, reservationCode, issueType, message: text, by });
     if (!res || res.ok !== true){
       alert("処理できませんでした（" + ((res && res.error) || "不明なエラー") + "）。少し待ってからやり直してください。");
       group.querySelectorAll("button").forEach(x => x.disabled = false);
@@ -665,7 +672,7 @@ function renderNotices(){
 function noticeCardHtml_(n){
   const id = String(n.id);
   const unread = !READ.has(id);
-  if (n.kind === "approve") return renderApproveCard_(n, id, unread);
+  // kind=approve は visibleNotices() で落ちている（📤はキューから直接描く）。ここには来ない
 
   const icon = KIND_ICON[n.kind] || "ℹ️";
   const title = String(n.title || "");
@@ -702,9 +709,9 @@ function approveCardHtml_(q){
       ${q.note ? `<div class="n-body" style="color:var(--wait)">${esc(String(q.note))}</div>` : ""}
       <textarea class="msgbox" id="${box}">${esc(text)}</textarea>
       <div class="n-act">
-        <button class="primary" data-qact="approve" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">✅ 承認</button>
-        <button data-qact="save_edit" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">💾 修正だけ保存</button>
-        <button class="danger" data-qact="reject" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">🚫 送らない</button>
+        <button class="primary" data-qact="approve" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">✅ 承認</button>
+        <button data-qact="save_edit" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">💾 修正だけ保存</button>
+        <button class="danger" data-qact="reject" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">🚫 送らない</button>
         ${q.checkIn ? `<button data-go="${esc(String(q.checkIn))}">📅 その日を見る</button>` : ""}
       </div></div>`;
 }
