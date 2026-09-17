@@ -426,6 +426,7 @@ function cardHtml(r){
     </div>
     <div class="c-rep">${accMark(r.access)} ${esc(r.rep)}</div>
     ${meta ? `<div class="c-meta">${esc(meta)}</div>` : ""}
+    ${r.rooms ? `<div class="c-meta">🛏 ${esc(r.rooms)}</div>` : ""}
     <div class="c-st ${k}">${esc(r.status)}</div>`;
   const cls = `card ${f.cls}${isPast(r)?" past":""}${url ? " tapcard" : ""}`;
   return url
