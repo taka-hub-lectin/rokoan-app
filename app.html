@@ -497,12 +497,18 @@ function cardHtml(r){
    ========================================================= */
 let detailOpen = false;
 
-/** その予約の期間にかかる注意（駐車が2台・ダブルブッキング）を拾う */
+/**
+ * その予約の期間にかかる⛔ダブルブッキングを拾う。
+ * **駐車が2台になることは詳細に出さない**（2026-09-18 たかさん指示:
+ * 「カレンダーの囲いで足りている」）。カレンダーの紫の枠・予約タブの
+ * 「🚗 駐車が2台になる日」の区画・🔔お知らせは今までどおり残す。
+ */
 function notesFor(r){
   const ci = parseYmd(r.ci), co = parseYmd(r.co);
   if (!ci) return [];
   const end = co || new Date(ci.getTime() + 86400000);
   return DATA.notes.filter(n => {
+    if (n.kind !== "double") return false;
     const s = parseYmd(n.start), e = parseYmd(n.end);
     return s && e && s < end && ci < e;
   });
@@ -524,9 +530,8 @@ function detailHtml(r){
                + row("🛏 部屋割り", r.rooms)
                + row("🍼 ベビー用品", r.baby);
 
-  const notes = notesFor(r).map(n => n.kind === "double"
-    ? `<div class="sh-r attn"><div class="k">⛔ 注意</div><div class="v ng">${esc(n.note)}</div></div>`
-    : `<div class="sh-r attn"><div class="k">🚗 駐車</div><div class="v wait">${fmtMD(n.start)}〜${fmtMD(n.end)} は2台になります（🏠 ${esc(n.main)}／🌿 ${esc(n.hanare)}）</div></div>`
+  const notes = notesFor(r).map(n =>
+    `<div class="sh-r attn"><div class="k">⛔ 注意</div><div class="v ng">${esc(n.note)}</div></div>`
   ).join("");
 
   return `<div class="sh-grip"></div>
