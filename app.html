@@ -492,7 +492,7 @@ function cardHtml(r){
 /* =========================================================
    予約の詳細（下から出るシート）
    アンケートで聞き取った項目のうち、家族の対応が要るものだけを出す
-   （チェックイン時間・ベッド・部屋割り・ベビー用品）。2026-09-18 たかさん確定。
+   （チェックイン時間・チェックアウト時間・ベッド・部屋割り・ベビー用品）。2026-09-18 たかさん確定。
    前泊地・行先地は出さない。旅券・住所・身分証の写真はそもそもアプリに来ていない。
    ========================================================= */
 let detailOpen = false;
@@ -526,6 +526,7 @@ function detailHtml(r){
 
   // 聞き取り項目。回答が無いものは行ごと出さない（空欄を並べない）
   const survey = row("⏰ 到着", fmtTime(r.ciTime))
+               + row("⏰ 退室", fmtTime(r.coTime))
                + row("🛏 ベッド", r.bed)
                + row("🛏 部屋割り", r.rooms)
                + row("🍼 ベビー用品", r.baby);
@@ -549,7 +550,7 @@ function detailHtml(r){
       ${row("📋 状態", r.status, stStyle(r.status))}
       ${notes}
     </div>
-    ${survey ? "" : `<div class="sh-none">ご希望（到着時間・ベッド・部屋割り・ベビー用品）の記入はありません。</div>`}
+    ${survey ? "" : `<div class="sh-none">ご希望（到着・退室の時間・ベッド・部屋割り・ベビー用品）の記入はありません。</div>`}
     <div class="sh-act">
       ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">📝 名簿を開く</a>` : ""}
       <button type="button" id="d-close">閉じる</button>
