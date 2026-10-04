@@ -527,6 +527,7 @@ function detailHtml(r){
   // 聞き取り項目。回答が無いものは行ごと出さない（空欄を並べない）
   const survey = row("⏰ 到着", fmtTime(r.ciTime))
                + row("⏰ 退室", fmtTime(r.coTime))
+               + row("👶 内訳", r.kids)
                + row("🛏 ベッド", r.bed)
                + row("🛏 部屋割り", r.rooms)
                + row("🍼 ベビー用品", r.baby);
