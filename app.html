@@ -687,6 +687,49 @@ function pendingQueueItems(){
     .sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
 }
 
+/** 「yyyy-MM-dd HH:mm:ss」（JST・窓口GASが揃えて返す形）から今までの分数。読めなければ null */
+function minutesSinceJst_(s){
+  const m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return null;
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - 9 * 3600 * 1000;
+  return Math.floor((Date.now() - t) / 60000);
+}
+function hoursText_(mins){
+  if (mins === null) return "";
+  if (mins < 60) return mins + "分";
+  const h = Math.floor(mins / 60);
+  return h < 24 ? h + "時間" : Math.floor(h / 24) + "日";
+}
+
+/**
+ * 📤の「結果」を出す行（2026-10-07 たかさん「自動メッセージ送信したかわからない」への対応）。
+ *
+ * それまでは承認を押した瞬間にカードが消え、送信済みもエラーもどこにも出ていなかった。
+ * そのため **9/17から3週間、1通も送られていないことに誰も気づけなかった**
+ * （承認済みの行が1件も無く、エージェントは毎回「0件」で静かに空振りしていた）。
+ * 承認＝取り消しづらい片道の操作なので、結果を見る画面を必ず置く。
+ */
+const RESULT_STATUSES = { "承認済み": 1, "送信済み": 1, "エラー": 1 };
+const RESULT_WINDOW_MIN = 3 * 24 * 60;   // 直近3日ぶんだけ出す（古い結果は自然に消える）
+const STUCK_AFTER_MIN = 120;             // 承認からこれだけ送られていなければ「止まっている」
+
+function resultQueueItems(){
+  return (DATA.queue || [])
+    .filter(q => RESULT_STATUSES[q.status])
+    .map(q => {
+      const at = String(q.updatedAt || q.decidedAt || "");
+      return Object.assign({}, q, { _at: at, _mins: minutesSinceJst_(at) });
+    })
+    // 日時が読めない行は落とさない（落とすと「送ったか分からない」が復活する）
+    .filter(q => q._mins === null || q._mins <= RESULT_WINDOW_MIN)
+    .sort((a, b) => String(b._at).localeCompare(String(a._at)));
+}
+/** 承認したのに送られていない行＝人が動く必要がある。バッジにも数える */
+function stuckQueueItems(){
+  return resultQueueItems().filter(q =>
+    q.status === "承認済み" && (q._mins === null || q._mins >= STUCK_AFTER_MIN));
+}
+
 /** 端末に保存した表示名（承認記録用。本人確認ではない＝既読と同じ「端末ごと」の弱い記録） */
 async function myName(){
   let n = await Store.get("app:name");
@@ -719,7 +762,9 @@ function visibleNotices(){
 }
 function unreadCount(){
   // 「やることの数」＝画面に出ている未読のお知らせ＋承認待ちの文面
-  return visibleNotices().filter(n => !READ.has(String(n.id))).length + pendingQueueItems().length;
+  //   ＋承認したのに送られていない文面（放っておくとゲストに何も届かない）
+  return visibleNotices().filter(n => !READ.has(String(n.id))).length
+    + pendingQueueItems().length + stuckQueueItems().length;
 }
 function updateBadge(){
   const b = document.getElementById("nbadge");
@@ -753,6 +798,7 @@ function fmtAt(s){
 function renderNotices(){
   const el = document.getElementById("v-notices");
   const pend = pendingQueueItems();
+  const res = resultQueueItems();   // 承認済み・送信済み・エラー（直近3日）
   // 📤カードが出ている予約について、毎朝の未記入チェックの⏳・⚠️は隠す。
   // 同じ事実を2枚で言わない（2026-09-17 たかさん「乱立させないで」）。
   // 名簿GAS側は一切変えていない＝メールのフォールバックも従来どおり効く。
@@ -764,10 +810,10 @@ function renderNotices(){
   }
   if (DATA.noticesMissing){
     h += `<div class="banner wait">お知らせが取れていません（窓口が古いままの可能性）。前回の内容を表示しています。</div>`;
-  } else if (!list.length && !pend.length && !DATA.noticesUpdated){
+  } else if (!list.length && !pend.length && !res.length && !DATA.noticesUpdated){
     h += `<div class="banner wait">お知らせのデータが読めていません。「まだ無い」のではなく、取れていない状態です。たかさんに連絡してください。</div>`;
   }
-  if (!list.length && !pend.length){
+  if (!list.length && !pend.length && !res.length){
     el.innerHTML = h + (DATA.noticesUpdated ? `<div class="banner info">お知らせはまだありません。<br>
       フォーム未記入・同行者の記入漏れ・駐車が2台になる日が、ここに届きます（毎朝8時と9時のチェック）。</div>` : "");
     return;
@@ -779,9 +825,15 @@ function renderNotices(){
     h += pend.map(approveCardHtml_).join("");
   }
 
-  // ② そのほかのお知らせ。既読は「対応済み」に畳む
+  // ② 承認した文面が「送れたか」。ここを見れば送信済み／送信待ち／エラーが分かる
+  if (res.length){
+    h += `<div class="sec">送信の結果（直近3日）</div>`;
+    h += res.map(resultCardHtml_).join("");
+  }
+
+  // ③ そのほかのお知らせ。既読は「対応済み」に畳む
   if (list.length){
-    if (pend.length) h += `<div class="sec">そのほかのお知らせ</div>`;
+    if (pend.length || res.length) h += `<div class="sec">そのほかのお知らせ</div>`;
     h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
     const open = list.filter(n => !READ.has(String(n.id)));
     const done = list.filter(n => READ.has(String(n.id)));
@@ -811,7 +863,12 @@ function renderNotices(){
     const issueType = b.dataset.issue;
     const box = document.getElementById(b.dataset.box);
     const text = box ? box.value : "";
-    if (action === "reject" && !confirm("このゲストには送りません。よろしいですか？")) return;
+    if (action === "reject"){
+      const msg = b.dataset.withdraw
+        ? "承認を取り下げます（まだ送られていなければ送りません）。よろしいですか？"
+        : "このゲストには送りません。よろしいですか？";
+      if (!confirm(msg)) return;
+    }
 
     const group = b.closest(".n-act");
     group.querySelectorAll("button").forEach(x => x.disabled = true);
@@ -872,11 +929,39 @@ function approveCardHtml_(q){
       <div class="n-body">${esc(kind)}${probs.length ? "：" + esc(probs.join("／")) : ""}</div>
       <div class="pill ${pill.cls}">${esc(pill.label)}</div>
       ${q.note ? `<div class="n-body" style="color:var(--wait)">${esc(String(q.note))}</div>` : ""}
+      <div class="n-body" style="color:var(--muted)">✅承認すると、自宅のパソコンがAirbnbから送ります。送れたかどうかは下の「送信の結果」に出ます。</div>
       <textarea class="msgbox" id="${box}">${esc(text)}</textarea>
       <div class="n-act">
         <button class="primary" data-qact="approve" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">✅ 承認</button>
         <button data-qact="save_edit" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">💾 修正だけ保存</button>
         <button class="danger" data-qact="reject" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}" data-box="${box}">🚫 送らない</button>
+        ${q.checkIn ? `<button data-go="${esc(String(q.checkIn))}">📅 その日を見る</button>` : ""}
+      </div></div>`;
+}
+
+/**
+ * 📤の結果カード。**ボタンは「取り下げる」だけ**（文面の編集はもうできない）。
+ * 承認済みのまま2時間たっていたら「送信待ち」ではなく「止まっています」と書く＝
+ * 送信エージェントの失敗は send.log の中にしか出ないので、無言で待たせない。
+ */
+function resultCardHtml_(q){
+  const pill = QSTATUS_PILL[q.status] || QSTATUS_PILL["承認待ち"];
+  const fac = FAC[q.fkey] || { short: q.fkey === "whole" ? "全棟" : "施設不明", cls: "unknown" };
+  const stuck = q.status === "承認済み" && (q._mins === null || q._mins >= STUCK_AFTER_MIN);
+  const waitText = q.status !== "承認済み" ? ""
+    : stuck
+      ? `⏳ 承認から${hoursText_(q._mins)}たっていますが、まだ送られていません。たかさんに連絡してください。`
+      : "⏳ 自宅のパソコンが送るのを待っています（ふだんは数分）。";
+  const head = { "承認済み": "送信待ち", "送信済み": "送信済み", "エラー": "送れませんでした" }[q.status] || q.status;
+  return `<div class="card ntc ${esc(fac.cls)}${stuck ? " unread" : ""}" data-id="${esc(String(q.id || ""))}">
+      <div class="n-at">${fmtAt(q._at)}・${esc(head)}</div>
+      <div class="n-title">${esc(fac.short)}　${esc(String(q.guestName || ""))}様</div>
+      <div class="pill ${pill.cls}">${esc(pill.label)}</div>
+      ${waitText ? `<div class="n-body"${stuck ? ' style="color:var(--attn)"' : ''}>${esc(waitText)}</div>` : ""}
+      ${q.note ? `<div class="n-body">${esc(String(q.note))}</div>` : ""}
+      ${q.decidedBy ? `<div class="n-body" style="color:var(--muted)">承認：${esc(String(q.decidedBy))}</div>` : ""}
+      <div class="n-act">
+        ${q.status === "承認済み" ? `<button class="danger" data-qact="reject" data-withdraw="1" data-qid="${esc(String(q.id || ""))}" data-code="${esc(String(q.reservationCode))}" data-issue="${esc(String(q.issueType))}">🚫 取り下げる</button>` : ""}
         ${q.checkIn ? `<button data-go="${esc(String(q.checkIn))}">📅 その日を見る</button>` : ""}
       </div></div>`;
 }
