@@ -152,6 +152,8 @@
   .sh-r .v.wait{color:var(--wait);}
   .sh-r.attn{background:#FFFBF0;border-radius:8px;}
   .sh-none{font-size:13px;color:var(--muted);padding:12px 2px;line-height:1.6;}
+  /* 空欄の理由（「聞いていない」と「書いていない」を区別する・2026-10-07） */
+  .sh-why{font-size:13px;color:var(--muted);}
   .sh-act{display:flex;gap:9px;margin-top:16px;}
   .sh-act a,.sh-act button{
     flex:1;text-align:center;text-decoration:none;font-family:inherit;font-size:15px;
@@ -514,6 +516,32 @@ function notesFor(r){
   });
 }
 
+/** ベビー用品を聞く基準＝6歳以下（受付ページの CHILD_AGE_MAX と同じ数字） */
+const BABY_AGE_MAX = 6;
+
+/**
+ * kids（「大人3名・子ども2名（5歳・1歳）」）から、6歳以下の子がいるかを見る。
+ * 受付ページは6歳以下の子がいるときだけベビー用品を聞くので、
+ * 「空欄＝ご希望なし」と「空欄＝そもそも聞いていない」をここで分ける。
+ */
+function hasBabyAge_(kids){
+  const m = String(kids || "").match(/（([^）]*)）/);
+  if (!m) return false;
+  return m[1].split("・").some(x => {
+    const n = Number(String(x).replace(/[^0-9]/g, ""));
+    return /歳/.test(x) && !isNaN(n) && n <= BABY_AGE_MAX;
+  });
+}
+
+/** チェックインまであと何日か（JSTの日付どうしで引く）。読めなければ null */
+function daysUntil_(ymd){
+  const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const t = jstToday();
+  const dayNum = (y, mo, d) => Math.round(Date.UTC(y, mo - 1, d) / 86400000);
+  return dayNum(+m[1], +m[2], +m[3]) - dayNum(t.y, t.m, t.d);
+}
+
 function detailHtml(r){
   const f = facOf(r);
   const url = rosterUrl(r);
@@ -524,13 +552,45 @@ function detailHtml(r){
     r.nats || "",
   ].filter(Boolean).join("・");
 
-  // 聞き取り項目。回答が無いものは行ごと出さない（空欄を並べない）
-  const survey = row("⏰ 到着", fmtTime(r.ciTime))
+  /* 聞き取り項目。**空欄のときは理由を書く**（2026-10-07）。
+     それまでは回答が無い行を丸ごと消していたので、
+       ・離れだから聞いていない（ベッド・部屋割りは母屋の人にだけ聞く設問）
+       ・6歳以下の子がいないから聞いていない（ベビー用品）
+       ・旧Googleフォームには設問が無かった（ベビー用品の列は受付ページと一緒に作った）
+       ・ゲストが書いていない
+     の4つが画面で区別できず、たかさんに同じ質問を2回（9/18・10/7）させた。 */
+  const rowRaw = (k, html) => `<div class="sh-r"><div class="k">${k}</div><div class="v">${html}</div></div>`;
+  const why = t => `<span class="sh-why">${esc(t)}</span>`;
+  const isHanare = r.fkey === "hanare";
+  const cnt = Number(r.count);
+  // via は📅アプリ用の20列目（2026-10-07 追加）。予約ボードを1回更新するまでは空＝理由を書かない
+  const oldForm = r.via === "oldform";
+
+  const bedWhy   = isHanare ? "離れでは伺っていません" : "ご記入なし";
+  const roomsWhy = isHanare ? "離れでは伺っていません"
+                 : !isFinite(cnt) || !cnt ? "ご記入なし"
+                 : cnt >= 3 ? "おまかせ／ご記入なし" : "3名以上のときだけ伺います";
+  const babyWhy  = oldForm ? "旧フォームには設問がありません"
+                 : hasBabyAge_(r.kids) ? "ご希望なし" : "6歳以下のお子さまなし";
+
+  // 名簿のご記入がある行だけ、聞き取り項目を並べる（未記入の行は下で1行にまとめる）
+  const hasRoster = r.source === "form";
+  const survey = !hasRoster ? "" :
+                 row("⏰ 到着", fmtTime(r.ciTime))
                + row("⏰ 退室", fmtTime(r.coTime))
                + row("👶 内訳", r.kids)
-               + row("🛏 ベッド", r.bed)
-               + row("🛏 部屋割り", r.rooms)
-               + row("🍼 ベビー用品", r.baby);
+               // 離れで両方とも空なら1行にまとめる（同じ理由を2行続けて書かない）
+               + (isHanare && !r.bed && !r.rooms
+                    ? rowRaw("🛏 ベッド・部屋割り", why("離れでは伺っていません"))
+                    : rowRaw("🛏 ベッド", r.bed ? esc(r.bed) : why(bedWhy))
+                      + rowRaw("🛏 部屋割り", r.rooms ? esc(r.rooms) : why(roomsWhy)))
+               + rowRaw("🍼 ベビー用品", r.baby ? esc(r.baby) : why(babyWhy));
+
+  // 名簿が未記入＝そもそも何も聞けていない。いつまでに要るかを一緒に出す
+  const dleft = daysUntil_(r.ci);
+  const whenText = dleft === null ? "" : dleft > 0 ? `あと${dleft}日` : dleft === 0 ? "本日" : `${-dleft}日前に到着`;
+  const noRosterText = `まだ名簿のご記入がありません（${fmtMD(r.ci)} IN${whenText ? "・" + whenText : ""}）。`
+    + `到着の時間・ベッド・ベビー用品のご希望も、記入されるまで分かりません。`;
 
   const notes = notesFor(r).map(n =>
     `<div class="sh-r attn"><div class="k">⛔ 注意</div><div class="v ng">${esc(n.note)}</div></div>`
@@ -551,7 +611,9 @@ function detailHtml(r){
       ${row("📋 状態", r.status, stStyle(r.status))}
       ${notes}
     </div>
-    ${survey ? "" : `<div class="sh-none">ご希望（到着・退室の時間・ベッド・部屋割り・ベビー用品）の記入はありません。</div>`}
+    ${hasRoster
+        ? (survey ? "" : `<div class="sh-none">ご希望（到着・退室の時間・ベッド・部屋割り・ベビー用品）の記入はありません。</div>`)
+        : `<div class="sh-none">${esc(noRosterText)}</div>`}
     <div class="sh-act">
       ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">📝 名簿を開く</a>` : ""}
       <button type="button" id="d-close">閉じる</button>
