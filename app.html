@@ -822,10 +822,28 @@ function visibleNotices(){
     return true;
   });
 }
+/**
+ * 未記入（⏳ng）・記入漏れ（⚠️sc）のお知らせが、**今はもう解消しているか**。
+ * お知らせは毎朝の記録として積むだけで、あとで記入されても消えない（名簿GAS お知らせ.js）。
+ * そこでアプリ側で、予約の今の状態（📅アプリ用の status）と突き合わせる（2026-10-08 たかさん指摘）。
+ *   解消＝同じ棟・同じチェックイン日の行が全部「名簿に記入あり（source=form）かつ ✅」。
+ *   全棟（fkey=whole）は母屋行・離れ行の両方がそろって ✅ のときだけ解消。
+ *   行が見つからない（予約が消えた・過去になった）ときは解消扱いにしない＝勝手に隠さない。
+ */
+function isResolvedNotice(n){
+  if (n.kind !== "ng" && n.kind !== "sc") return false;
+  const ci = String(n.ci || ""), fk = String(n.fkey || "");
+  if (!ci) return false;
+  const rows = (DATA.rows || []).filter(r => String(r.ci) === ci &&
+    (fk === "whole" ? (r.fkey === "main" || r.fkey === "hanare") && String(r.whole || "") : r.fkey === fk));
+  if (!rows.length) return false;
+  if (fk === "whole" && !(rows.some(r => r.fkey === "main") && rows.some(r => r.fkey === "hanare"))) return false;
+  return rows.every(r => r.source === "form" && /^✅/.test(String(r.status || "")));
+}
 function unreadCount(){
   // 「やることの数」＝画面に出ている未読のお知らせ＋承認待ちの文面
   //   ＋承認したのに送られていない文面（放っておくとゲストに何も届かない）
-  return visibleNotices().filter(n => !READ.has(String(n.id))).length
+  return visibleNotices().filter(n => !READ.has(String(n.id)) && !isResolvedNotice(n)).length
     + pendingQueueItems().length + stuckQueueItems().length;
 }
 function updateBadge(){
@@ -897,8 +915,9 @@ function renderNotices(){
   if (list.length){
     if (pend.length || res.length) h += `<div class="sec">そのほかのお知らせ</div>`;
     h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
-    const open = list.filter(n => !READ.has(String(n.id)));
-    const done = list.filter(n => READ.has(String(n.id)));
+    // 解消済みの未記入（その後に記入された）は、既読にしなくても「対応済み」へ回す
+    const open = list.filter(n => !READ.has(String(n.id)) && !isResolvedNotice(n));
+    const done = list.filter(n => READ.has(String(n.id)) || isResolvedNotice(n));
     h += open.length
       ? open.map(noticeCardHtml_).join("")
       : `<div class="empty">未対応のお知らせはありません。</div>`;
@@ -955,7 +974,8 @@ function renderNotices(){
 /** お知らせ1件ぶんのHTML。未対応の一覧と「対応済み」の折りたたみの両方から使う */
 function noticeCardHtml_(n){
   const id = String(n.id);
-  const unread = !READ.has(id);
+  const resolved = isResolvedNotice(n);
+  const unread = !READ.has(id) && !resolved;
   // kind=approve は visibleNotices() で落ちている（📤はキューから直接描く）。ここには来ない
 
   const icon = KIND_ICON[n.kind] || "ℹ️";
@@ -963,7 +983,7 @@ function noticeCardHtml_(n){
   const showIcon = !/^[←-⯿\u{1F000}-\u{1FFFF}]/u.test(title);
   return `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
       <div class="n-at">${fmtAt(n.at)}</div>
-      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}</div>
+      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}${resolved ? ' <span style="color:#2e7d32;font-size:12px">✅ 記入済み</span>' : ""}</div>
       ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
       <div class="n-act">
         ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
