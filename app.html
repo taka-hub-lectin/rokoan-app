@@ -286,7 +286,7 @@ const STALE_HOURS = 26;   // 名簿GASのBOARD_STALE_HOURSと同じ
 
 let DATA = { updated:"", rows:[], notes:[], notices:[], queue:[] };
 let READ = new Set();   // 既読のお知らせid（端末ごと・Store "app:read"）
-let curMonth = startOfMonth(new Date());
+let curMonth = null;   // 初期化は jstToday を定義したあと（下）
 let selDay = null;
 
 /* ---- 日付（文字列は必ず現地時間として読む。UTC解釈で1日ずれるのを避ける）---- */
@@ -300,7 +300,8 @@ function ymd(d){
 }
 function startOfMonth(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
 function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
-function today0(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+/** 「今日」は日本時間で決める（海外にいる家族の端末でも、ロコ庵の今日と揃える・2026-10-08） */
+function today0(){ const t=jstToday(); return new Date(t.y,t.m-1,t.d); }
 /** 窓口が返す "yyyy-MM-dd HH:mm[:ss]" は日本時間。端末の時間帯に関係なくJSTとして読む */
 function parseJst(s){
   const m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
@@ -309,6 +310,7 @@ function parseJst(s){
 }
 /** 日本時間の「今日」の y/m/d */
 function jstToday(){ const t = new Date(Date.now() + 9*3600000); return { y:t.getUTCFullYear(), m:t.getUTCMonth()+1, d:t.getUTCDate() }; }
+curMonth = startOfMonth(today0());
 
 function fmtMD(s){
   const d = parseYmd(s); if(!d) return s||"";
@@ -414,7 +416,7 @@ function renderCal(){
 
   document.getElementById("prev").onclick = () => { curMonth = addMonths(curMonth,-1); selDay=null; renderCal(); };
   document.getElementById("next").onclick = () => { curMonth = addMonths(curMonth, 1); selDay=null; renderCal(); };
-  document.getElementById("tdy").onclick  = () => { curMonth = startOfMonth(new Date()); selDay=ymd(today0()); renderCal(); };
+  document.getElementById("tdy").onclick  = () => { curMonth = startOfMonth(today0()); selDay=ymd(today0()); renderCal(); };
   document.querySelectorAll("#days .cell").forEach(c => {
     c.onclick = () => { selDay = c.dataset.d; renderCal(); };
   });
@@ -449,9 +451,20 @@ function renderDayDetail(){
  * 行は「📅アプリ用」を書いた時点の位置。名簿は毎朝チェックイン日で並べ替わるが、
  * 並べ替えと📅アプリ用の書き出しは同じ処理の中で続けて走るので、次の更新まではずれない。
  */
+const ROW_LINK_FRESH_MS = 10 * 60 * 1000;   // 取り直してからこれ以内なら行まで飛ぶ
 function rosterUrl(r){
+  if (!DATA.sheet || !DATA.sheet.roster) return "";
+  // 行番号は「📅アプリ用」を書いた時点のもの。名簿は毎朝と記入のたびに並べ替わるので、
+  // 前回の内容（通信できず表示中・開きっぱなし）では別のゲストの旅券・住所の行を開きかねない。
+  // 取り直した直後だけ行まで飛び、古いときは名簿のタブだけ開く（2026-10-08 レビュー#2）。
+  const fresh = lastOkFetchAt && (Date.now() - lastOkFetchAt) < ROW_LINK_FRESH_MS;
+  return `${DATA.sheet.url}#gid=${DATA.sheet.roster}` + (r.row && fresh ? `&range=A${r.row}` : "");
+}
+/** 行まで飛べない理由（rosterUrl が行を付けなかったとき） */
+function rosterRowNote(r){
   if (!DATA.sheet || !DATA.sheet.roster || !r.row) return "";
-  return `${DATA.sheet.url}#gid=${DATA.sheet.roster}&range=A${r.row}`;
+  const fresh = lastOkFetchAt && (Date.now() - lastOkFetchAt) < ROW_LINK_FRESH_MS;
+  return fresh ? "" : "（内容が古いので名簿のタブだけ開きます。行を直接開くには「更新」を押してから）";
 }
 
 /**
@@ -615,10 +628,10 @@ function detailHtml(r){
         ? (survey ? "" : `<div class="sh-none">ご希望（到着・退室の時間・ベッド・部屋割り・ベビー用品）の記入はありません。</div>`)
         : `<div class="sh-none">${esc(noRosterText)}</div>`}
     <div class="sh-act">
-      ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">📝 名簿を開く</a>` : ""}
+      ${url && r.row ? `<a href="${esc(url)}" target="_blank" rel="noopener">📝 名簿を開く</a>` : ""}
       <button type="button" id="d-close">閉じる</button>
     </div>
-    ${url ? `<div class="sh-note">旅券・住所・身分証の写真は名簿（スプレッドシート）で見られます</div>`
+    ${url && r.row ? `<div class="sh-note">旅券・住所・身分証の写真は名簿（スプレッドシート）で見られます${esc(rosterRowNote(r))}</div>`
           : `<div class="sh-note">この予約はまだ名簿に記入がないので、開ける行がありません</div>`}`;
 }
 
@@ -792,6 +805,36 @@ function stuckQueueItems(){
     q.status === "承認済み" && (q._mins === null || q._mins >= STUCK_AFTER_MIN));
 }
 
+/** "yyyy-MM-dd…" → "yyyy-MM"。読めなければ "" */
+function ymOf_(s){ const m = String(s || "").match(/^(\d{4})-(\d{2})/); return m ? m[1] + "-" + m[2] : ""; }
+/** 📨送信済みの件数を月ごとに数える（仕組みが働いていることが家族にも見えるように・2026-10-08 レビュー#6） */
+function sentCountByMonth_(){
+  const out = {};
+  (DATA.queue || []).filter(q => q.status === "送信済み").forEach(q => {
+    const ym = ymOf_(q.updatedAt || q.decidedAt || "");
+    if (ym) out[ym] = (out[ym] || 0) + 1;
+  });
+  return out;
+}
+/**
+ * 🔔の先頭に出す内訳。バッジの数字は「お知らせ＋承認待ち＋止まっている送信」の合計なので、
+ * 何が何件かをここで分けて見せる（レビュー#7）。
+ */
+function noticeSummaryHtml_(pend, list){
+  const stuck = stuckQueueItems().length;
+  const open = list.filter(n => !READ.has(String(n.id)) && !isDoneNotice(n)).length;
+  const t = jstToday();
+  const ym = t.y + "-" + String(t.m).padStart(2, "0");
+  const pm = t.m === 1 ? (t.y - 1) + "-12" : t.y + "-" + String(t.m - 1).padStart(2, "0");
+  const by = sentCountByMonth_();
+  const parts = [];
+  if (pend) parts.push("📤 承認待ち " + pend.length);
+  if (stuck) parts.push("🛑 送信が止まっている " + stuck);
+  parts.push("🔔 未対応 " + open);
+  const sent = `📨 ゲストへの自動送信：今月 ${by[ym] || 0}件（先月 ${by[pm] || 0}件）`;
+  return `<div class="banner info" style="display:flex;flex-wrap:wrap;gap:4px 14px"><span>${esc(parts.join("　"))}</span><span>${esc(sent)}</span></div>`;
+}
+
 /** 端末に保存した表示名（承認記録用。本人確認ではない＝既読と同じ「端末ごと」の弱い記録） */
 async function myName(){
   let n = await Store.get("app:name");
@@ -830,10 +873,20 @@ function visibleNotices(){
  *   全棟（fkey=whole）は母屋行・離れ行の両方がそろって ✅ のときだけ解消。
  *   行が見つからない（予約が消えた・過去になった）ときは解消扱いにしない＝勝手に隠さない。
  */
-function isResolvedNotice(n){
-  if (n.kind !== "ng" && n.kind !== "sc") return false;
+function isResolvedNotice(n){ return resolveKind(n) === "filled"; }
+/** チェックイン日を過ぎた未記入・記入漏れ＝もうアプリからは何もできない（キャンセル・そのまま宿泊）。対応済みへ畳む */
+function isExpiredNotice(n){ return resolveKind(n) === "expired"; }
+function isDoneNotice(n){ return resolveKind(n) !== ""; }
+/** "filled"＝記入された／"expired"＝期日を過ぎた／""＝まだ対応が要る */
+function resolveKind(n){
+  if (n.kind !== "ng" && n.kind !== "sc") return "";
   const ci = String(n.ci || ""), fk = String(n.fkey || "");
-  if (!ci) return false;
+  if (!ci) return "";
+  if (resolveFilled_(n, ci, fk)) return "filled";
+  const left = daysUntil_(ci);
+  return (left !== null && left < 0) ? "expired" : "";
+}
+function resolveFilled_(n, ci, fk){
   const rows = (DATA.rows || []).filter(r => String(r.ci) === ci &&
     (fk === "whole" ? (r.fkey === "main" || r.fkey === "hanare") && String(r.whole || "") : r.fkey === fk));
   if (!rows.length) return false;
@@ -843,7 +896,7 @@ function isResolvedNotice(n){
 function unreadCount(){
   // 「やることの数」＝画面に出ている未読のお知らせ＋承認待ちの文面
   //   ＋承認したのに送られていない文面（放っておくとゲストに何も届かない）
-  return visibleNotices().filter(n => !READ.has(String(n.id)) && !isResolvedNotice(n)).length
+  return visibleNotices().filter(n => !READ.has(String(n.id)) && !isDoneNotice(n)).length
     + pendingQueueItems().length + stuckQueueItems().length;
 }
 function updateBadge(){
@@ -877,6 +930,10 @@ function fmtAt(s){
 
 function renderNotices(){
   const el = document.getElementById("v-notices");
+  // 入力途中の文面を控える。5分おきの取り直し・画面に戻ったときの描き直しで
+  // 書きかけが元に戻っていた（2026-10-08 レビュー#1）。描き直したあとに戻す。
+  const typing = {};
+  el.querySelectorAll("textarea.msgbox").forEach(t => { if (t.value !== t.defaultValue) typing[t.id] = { v: t.value, s: t.selectionStart, f: document.activeElement === t }; });
   const pend = pendingQueueItems();
   const res = resultQueueItems();   // 承認済み・送信済み・エラー（直近3日）
   // 📤カードが出ている予約について、毎朝の未記入チェックの⏳・⚠️は隠す。
@@ -885,6 +942,7 @@ function renderNotices(){
   const list = visibleNotices();
 
   let h = staleBanner();
+  h += noticeSummaryHtml_(pend, list);
   if (DATA.queueMissing){
     h += `<div class="banner wait">承認待ちの文面が取れていません（窓口が古いままの可能性）。前回の内容を表示しています。たかさんに連絡してください。</div>`;
   }
@@ -916,8 +974,8 @@ function renderNotices(){
     if (pend.length || res.length) h += `<div class="sec">そのほかのお知らせ</div>`;
     h += `<div class="n-tools"><button id="n-allread">すべて既読にする</button></div>`;
     // 解消済みの未記入（その後に記入された）は、既読にしなくても「対応済み」へ回す
-    const open = list.filter(n => !READ.has(String(n.id)) && !isResolvedNotice(n));
-    const done = list.filter(n => READ.has(String(n.id)) || isResolvedNotice(n));
+    const open = list.filter(n => !READ.has(String(n.id)) && !isDoneNotice(n));
+    const done = list.filter(n => READ.has(String(n.id)) || isDoneNotice(n));
     h += open.length
       ? open.map(noticeCardHtml_).join("")
       : `<div class="empty">未対応のお知らせはありません。</div>`;
@@ -927,6 +985,12 @@ function renderNotices(){
     }
   }
   el.innerHTML = h;
+  Object.keys(typing).forEach(id => {
+    const t = document.getElementById(id);
+    if (!t) return;
+    t.value = typing[id].v;
+    if (typing[id].f) { t.focus(); try { t.setSelectionRange(typing[id].s, typing[id].s); } catch (e) {} }
+  });
 
   const allBtn = document.getElementById("n-allread");
   if (allBtn) allBtn.onclick = async () => { await markRead(list.map(n => n.id)); renderNotices(); };
@@ -944,6 +1008,10 @@ function renderNotices(){
     const issueType = b.dataset.issue;
     const box = document.getElementById(b.dataset.box);
     const text = box ? box.value : "";
+    if (action === "approve" && box && !box.value.trim()){
+      alert("文面が空です。空のままでは承認できません（元の文面に戻すには「更新」を押してください）。");
+      return;
+    }
     if (action === "reject"){
       const msg = b.dataset.withdraw
         ? "承認を取り下げます（まだ送られていなければ送りません）。よろしいですか？"
@@ -974,8 +1042,11 @@ function renderNotices(){
 /** お知らせ1件ぶんのHTML。未対応の一覧と「対応済み」の折りたたみの両方から使う */
 function noticeCardHtml_(n){
   const id = String(n.id);
-  const resolved = isResolvedNotice(n);
+  const rk = resolveKind(n);
+  const resolved = rk !== "";
   const unread = !READ.has(id) && !resolved;
+  const doneMark = rk === "filled" ? '<span style="color:#2e7d32;font-size:12px">✅ 記入済み</span>'
+                 : rk === "expired" ? '<span style="color:var(--muted);font-size:12px">⌛ 期日を過ぎました</span>' : "";
   // kind=approve は visibleNotices() で落ちている（📤はキューから直接描く）。ここには来ない
 
   const icon = KIND_ICON[n.kind] || "ℹ️";
@@ -983,7 +1054,7 @@ function noticeCardHtml_(n){
   const showIcon = !/^[←-⯿\u{1F000}-\u{1FFFF}]/u.test(title);
   return `<div class="card ntc${unread?" unread":""}" data-id="${esc(id)}">
       <div class="n-at">${fmtAt(n.at)}</div>
-      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}${resolved ? ' <span style="color:#2e7d32;font-size:12px">✅ 記入済み</span>' : ""}</div>
+      <div class="n-title">${showIcon ? icon + " " : ""}${esc(title)}${doneMark ? " " + doneMark : ""}</div>
       ${n.body ? `<div class="n-body">${esc(n.body)}</div>` : ""}
       <div class="n-act">
         ${n.ci ? `<button data-go="${esc(n.ci)}">📅 その日を見る</button>` : ""}
@@ -1125,6 +1196,7 @@ function showTab(name){
 function setSub(text){ document.getElementById("sub").textContent = text; }
 
 let lastFetchAt = 0;
+let lastOkFetchAt = 0;   // 最後に「取れた」時刻（rosterUrl が行まで飛ぶかの判断に使う）
 const REFETCH_AFTER_MS = 5 * 60 * 1000;   // 開きっぱなしの端末でも、5分以上たっていれば取り直す
 
 async function refresh(){
@@ -1134,6 +1206,7 @@ async function refresh(){
   if (res.data) { DATA = res.data; }
 
   if (res.ok){
+    lastOkFetchAt = Date.now();
     setSub("最終更新 " + (DATA.updated || "—"));
   } else if (res.error === "setup"){
     return renderSetup();
@@ -1183,6 +1256,11 @@ document.getElementById("reload").onclick = refresh;
 function refreshIfOld(){ if (Date.now() - lastFetchAt > REFETCH_AFTER_MS) refresh(); }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfOld(); });
 window.addEventListener("focus", refreshIfOld);
+
+// 電波が無い所でもページ自体が開けるように（sw.js・ネット優先＝オンラインなら常に最新。2026-10-08 レビュー#5）
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 
 // 前回の内容があれば先に出す（通信を待たせない）。既読の記録を読んでから描く
 (async () => {
