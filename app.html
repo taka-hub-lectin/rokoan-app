@@ -1337,9 +1337,58 @@ function renderEtc(){
       <span><span class="t">${m.t}</span><span class="d">${m.d}</span></span>
       <span class="ar">›</span></a>`).join("")
     + sheetLinks
+    + replyKeyHtml_()
     + `<div class="empty" style="margin-top:16px">
          予約データの最終更新: ${esc(DATA.updated || "まだ取得していません")}
        </div>`;
+  bindReplyKey_();
+}
+
+/**
+ * 💬返信用の鍵を貼り付ける欄（たかさんの端末用）。
+ * iPhoneのホーム画面アプリはSafariと記憶が別なので、リンクで渡せないことがある（2026-10-12）。
+ * 家族の端末でも欄は見えるが、鍵を知らなければ何も出ない（窓口が denied を返す）。
+ */
+function replyKeyHtml_(){
+  const on = RocoApi.hasReplyKey();
+  return `<div class="sec">💬 返信用の鍵</div>
+    <div class="card" style="padding:12px">
+      <div class="n-body" style="color:var(--muted)">${on
+        ? "この端末には返信用の鍵が入っています。🔔に「💬 ゲスト返信」が出ます。"
+        : "ゲスト返信のカードを見る人（たかさん）だけが入れます。家族の方は不要です。"}</div>
+      <input id="rkey-in" placeholder="${on ? "入れ直すときだけ貼り付け" : "鍵を貼り付け"}" autocomplete="off"
+        style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid var(--line)">
+      <div class="n-act" style="display:flex;gap:8px;margin-top:8px">
+        <button id="rkey-save">保存する</button>
+        ${on ? `<button id="rkey-clear">この端末から消す</button>` : ""}
+      </div>
+    </div>`;
+}
+
+function bindReplyKey_(){
+  const save = document.getElementById("rkey-save");
+  if (save) save.onclick = async () => {
+    const v = (document.getElementById("rkey-in").value || "").trim();
+    if (!/^[A-Za-z0-9]{16,64}$/.test(v)){ alert("鍵の形が違います（英数字だけの長い文字列です）。"); return; }
+    RocoApi.setReplyKey(v);
+    const rr = await RocoApi.loadReplies();
+    if (!rr.ok){
+      alert(rr.error === "denied" ? "鍵が違うようです。もう一度確かめてください。" : "確かめられませんでした（" + rr.error + "）。通信を確認してください。");
+      if (rr.error === "denied") RocoApi.setReplyKey("");
+      renderEtc();
+      return;
+    }
+    REPLIES = { items: rr.items, score: rr.score, error: "" };
+    alert("保存しました。🔔に「💬 ゲスト返信」が出ます。");
+    renderAll();
+  };
+  const clr = document.getElementById("rkey-clear");
+  if (clr) clr.onclick = () => {
+    if (!confirm("この端末から返信用の鍵を消します。よろしいですか？")) return;
+    RocoApi.setReplyKey("");
+    REPLIES = { items:[], score:null, error:"" };
+    renderAll();
+  };
 }
 
 /* =========================================================
