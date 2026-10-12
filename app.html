@@ -285,6 +285,8 @@ const FAC = {
 const STALE_HOURS = 26;   // 名簿GASのBOARD_STALE_HOURSと同じ
 
 let DATA = { updated:"", rows:[], notes:[], notices:[], queue:[] };
+// 💬ゲスト返信（2026-10-12 Phase 2）。返信用の鍵を入れた端末（たかさんのスマホ）だけが取りに行く
+let REPLIES = { items:[], score:null, error:"" };
 let READ = new Set();   // 既読のお知らせid（端末ごと・Store "app:read"）
 let curMonth = null;   // 初期化は jstToday を定義したあと（下）
 let selDay = null;
@@ -897,7 +899,8 @@ function unreadCount(){
   // 「やることの数」＝画面に出ている未読のお知らせ＋承認待ちの文面
   //   ＋承認したのに送られていない文面（放っておくとゲストに何も届かない）
   return visibleNotices().filter(n => !READ.has(String(n.id)) && !isDoneNotice(n)).length
-    + pendingQueueItems().length + stuckQueueItems().length;
+    + pendingQueueItems().length + stuckQueueItems().length
+    + REPLIES.items.filter(x => !x.scoreOnly).length;   // ゲストへの返信待ち（過去分の採点は数えない）
 }
 function updateBadge(){
   const b = document.getElementById("nbadge");
@@ -943,6 +946,9 @@ function renderNotices(){
 
   let h = staleBanner();
   h += noticeSummaryHtml_(pend, list);
+  // ⓪ 💬ゲスト返信（返信用の鍵がある端末だけ）。返事を待たせているゲストがいちばん急ぐので先頭に
+  const rsec = replySectionHtml_();
+  h += rsec;
   if (DATA.queueMissing){
     h += `<div class="banner wait">承認待ちの文面が取れていません（窓口が古いままの可能性）。前回の内容を表示しています。たかさんに連絡してください。</div>`;
   }
@@ -954,6 +960,8 @@ function renderNotices(){
   if (!list.length && !pend.length && !res.length){
     el.innerHTML = h + (DATA.noticesUpdated ? `<div class="banner info">お知らせはまだありません。<br>
       フォーム未記入・同行者の記入漏れ・駐車が2台になる日が、ここに届きます（毎朝8時と9時のチェック）。</div>` : "");
+    bindReplyHandlers_(el);
+    restoreTyping_(typing);
     return;
   }
 
@@ -985,12 +993,8 @@ function renderNotices(){
     }
   }
   el.innerHTML = h;
-  Object.keys(typing).forEach(id => {
-    const t = document.getElementById(id);
-    if (!t) return;
-    t.value = typing[id].v;
-    if (typing[id].f) { t.focus(); try { t.setSelectionRange(typing[id].s, typing[id].s); } catch (e) {} }
-  });
+  bindReplyHandlers_(el);
+  restoreTyping_(typing);
 
   const allBtn = document.getElementById("n-allread");
   if (allBtn) allBtn.onclick = async () => { await markRead(list.map(n => n.id)); renderNotices(); };
@@ -1119,6 +1123,188 @@ function resultCardHtml_(q){
       </div></div>`;
 }
 
+/** 描き直しの前に控えた書きかけの文面を戻す（📤承認カードと💬返信カードの両方） */
+function restoreTyping_(typing){
+  Object.keys(typing).forEach(id => {
+    const t = document.getElementById(id);
+    if (!t) return;
+    t.value = typing[id].v;
+    if (typing[id].f) { t.focus(); try { t.setSelectionRange(typing[id].s, typing[id].s); } catch (e) {} }
+  });
+}
+
+/* =========================================================
+   💬 ゲスト返信（Phase 2・お試し運転・2026-10-12）
+   - AIの返信案を、たかさんが 👍そのまま／✏️直した／❌違う で採点する。押したボタン＝採点
+   - 👍✏️ を押すと「文面をコピー → Airbnbのやり取りを開く」。送信は人が貼り付けて押す（自動送信はまだしない）
+   - 15:00（10/12）より前に届いた分は「採点だけ」（もう返信済みなのでコピーもAirbnbも開かない）
+   - 緊急（C）は返信案なし。Airbnbで直接対応して「✅対応した」
+   ========================================================= */
+const R_CAT = {
+  A: { label:"A そのまま答えられる", cls:"done" },
+  B: { label:"B 確認が要る", cls:"wait" },
+  C: { label:"C 緊急", cls:"err" },
+};
+// ❌✏️の理由。「重大」は Phase 3 の関所（重大0件）に数える（10/9 決定の定義）
+const R_WHY = [
+  ["tone",      "言い回しを直した（軽微）"],
+  ["category",  "区分が違う A↔B（軽微）"],
+  ["other",     "その他（軽微）"],
+  ["fact",      "事実が違う・根拠がない（重大）"],
+  ["facility",  "棟が違う（重大）"],
+  ["forbidden", "書いてはいけないことが入っている（重大）"],
+  ["missed_c",  "緊急を見落とした（重大）"],
+];
+const rid_ = (id) => "r" + String(id).replace(/[^a-zA-Z0-9]/g, "");
+
+function airbnbUrl_(x){
+  if (x.threadId) return "https://www.airbnb.jp/hosting/thread/" + encodeURIComponent(x.threadId) + "?thread_type=home_booking";
+  if (x.reservationCode) return "https://www.airbnb.jp/hosting/reservations/details/" + encodeURIComponent(x.reservationCode);
+  return "https://www.airbnb.jp/hosting/messages";
+}
+
+function replySectionHtml_(){
+  if (!RocoApi.hasReplyKey()) return "";
+  let h = "";
+  const live = REPLIES.items.filter(x => !x.scoreOnly);
+  const past = REPLIES.items.filter(x => x.scoreOnly);
+  if (REPLIES.error) h += `<div class="banner wait">💬 ゲスト返信が取れていません（${esc(REPLIES.error)}）。前回の内容を表示しています。</div>`;
+  h += `<div class="sec">💬 ゲスト返信（${live.length}件）</div>`;
+  const s = REPLIES.score;
+  if (s && s.n){
+    const pct = Math.round(s.ok / s.n * 100);
+    h += `<div class="empty" style="text-align:left">採点 ${s.n}件：👍${s.ok} ✏️${s.edited} ❌${s.wrong}（そのまま ${pct}%）・重大 ${s.severe}件
+      <br><span style="color:var(--muted)">自動送信の目安＝30件・重大0件・そのまま8割以上</span></div>`;
+  }
+  h += live.length ? live.map(replyCardHtml_).join("") : `<div class="empty">返事を待っているゲストはいません。</div>`;
+  if (past.length){
+    h += `<details><summary>採点だけ（過去分 ${past.length}件・もう返信済み）</summary>${past.map(replyCardHtml_).join("")}</details>`;
+  }
+  return h;
+}
+
+function replyCardHtml_(x){
+  const fac = FAC[x.fkey] || { short: x.fkey === "whole" ? "全棟" : "棟不明", cls: "unknown" };
+  const cat = R_CAT[x.category] || { label: x.category, cls: "no" };
+  const id = String(x.id);
+  const box = rid_(id) + "-text";
+  const stay = x.checkIn ? `${fmtMD(x.checkIn)}〜${fmtMD(x.checkOut)}${x.guests ? " " + x.guests + "名" : ""}` : "";
+  const head = `<div class="n-at">${esc(String(x.kind || ""))}${stay ? "・" + esc(stay) : ""}・受信 ${fmtAt(x.receivedAt)}</div>
+      <div class="n-title">${esc(fac.short)}　${esc(String(x.guestName || ""))}様</div>
+      <div class="pill ${cat.cls}">${esc(cat.label)}</div>
+      <div class="n-body"><span style="color:var(--muted)">ゲスト（日本語訳）</span><br>${esc(String(x.translationJa || x.original || ""))}</div>
+      <details style="margin-top:6px"><summary>原文</summary><div class="n-body">${esc(String(x.original || ""))}</div></details>`;
+  const why = `<div class="rwhy" data-rid="${esc(id)}" hidden style="margin-top:8px">
+      <select class="rwhy-sel" style="width:100%;padding:8px;border-radius:8px">
+        <option value="">理由を選んでください</option>
+        ${R_WHY.map(w => `<option value="${w[0]}">${esc(w[1])}</option>`).join("")}
+      </select>
+      <input class="rwhy-memo" placeholder="メモ（任意）" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid var(--line)">
+      <div class="n-act"><button class="primary" data-rsubmit="${esc(id)}">記録する</button></div>
+    </div>`;
+
+  if (x.category === "C"){
+    return `<div class="card ntc ${esc(fac.cls)} unread" data-rcard="${esc(id)}">
+      ${head}
+      <div class="n-body" style="color:var(--warn);font-weight:700">返信案は作っていません。Airbnbで直接対応してください。</div>
+      ${x.reason ? `<div class="n-body" style="color:var(--muted)">AIの判断：${esc(String(x.reason))}</div>` : ""}
+      <div class="n-act">
+        ${x.scoreOnly ? "" : `<a href="${esc(airbnbUrl_(x))}" target="_blank" rel="noopener">🔗 Airbnbで開く</a>`}
+        <button class="primary" data-ract="handled" data-rid="${esc(id)}">✅ 対応した</button>
+        <button data-ract="wrong" data-rid="${esc(id)}">❌ 緊急ではない</button>
+      </div>${why}</div>`;
+  }
+  return `<div class="card ntc ${esc(fac.cls)}${x.scoreOnly ? "" : " unread"}" data-rcard="${esc(id)}">
+      ${head}
+      <div class="n-body" style="color:var(--muted);margin-top:8px">返信案（直してから ✏️ を押せます）</div>
+      <textarea class="msgbox" id="${box}">${esc(String(x.draft || ""))}</textarea>
+      ${x.reason ? `<div class="n-body" style="color:var(--muted)">理由：${esc(String(x.reason))}</div>` : ""}
+      <div class="n-act">
+        <button class="primary" data-ract="ok" data-rid="${esc(id)}">👍 そのまま</button>
+        <button data-ract="edited" data-rid="${esc(id)}">✏️ 直した</button>
+        <button class="danger" data-ract="wrong" data-rid="${esc(id)}">❌ 違う</button>
+      </div>
+      <div class="n-body" style="color:var(--muted)">${x.scoreOnly
+        ? "過去分です。押しても採点が残るだけです（コピー・Airbnbは開きません）。"
+        : "👍✏️ を押すと、文面をコピーしてAirbnbのやり取りを開きます。貼り付けて送信してください（自動では送りません）。"}</div>
+      ${why}</div>`;
+}
+
+/** コピーしてAirbnbを開く。ボタンを押した直後に呼ぶ（待つと端末にポップアップを止められる） */
+function copyAndOpen_(x, text){
+  try { if (navigator.clipboard) navigator.clipboard.writeText(text); } catch (e) {}
+  window.open(airbnbUrl_(x), "_blank", "noopener");
+}
+
+async function sendReplyDecision_(x, decision, extra, btn){
+  const card = btn.closest("[data-rcard]");
+  card.querySelectorAll("button").forEach(b => b.disabled = true);
+  const label = btn.textContent;
+  btn.textContent = "…記録中";
+  const by = await myName();
+  const res = await RocoApi.decideReply(Object.assign({ id: x.id, decision, by }, extra || {}));
+  if (!res || res.ok !== true){
+    alert("記録できませんでした（" + ((res && res.error) || "不明なエラー") + "）。少し待ってからやり直してください。"
+      + (decision === "ok" || decision === "edited" ? "\n※文面のコピーとAirbnbを開くところまでは済んでいます。" : ""));
+    card.querySelectorAll("button").forEach(b => b.disabled = false);
+    btn.textContent = label;
+    return;
+  }
+  REPLIES.items = REPLIES.items.filter(y => String(y.id) !== String(x.id));
+  const rr = await RocoApi.loadReplies();
+  if (rr.ok) REPLIES = { items: rr.items, score: rr.score, error: "" };
+  renderNotices();
+  updateBadge();
+}
+
+function bindReplyHandlers_(el){
+  const find = (id) => REPLIES.items.find(y => String(y.id) === String(id));
+  el.querySelectorAll("[data-ract]").forEach(b => b.onclick = () => {
+    const x = find(b.dataset.rid);
+    if (!x) return;
+    const act = b.dataset.ract;
+    const card = b.closest("[data-rcard]");
+    const box = card.querySelector("textarea.msgbox");
+    if (act === "ok"){
+      if (!x.scoreOnly) copyAndOpen_(x, String(x.draft || ""));
+      return sendReplyDecision_(x, "ok", null, b);
+    }
+    if (act === "handled"){
+      if (!confirm("Airbnbでの対応は済みましたか？「対応済み」にします。")) return;
+      return sendReplyDecision_(x, "handled", null, b);
+    }
+    if (act === "edited" && box && box.value.trim() === String(x.draft || "").trim()){
+      alert("文面が変わっていません。そのままなら 👍 を押してください。");
+      return;
+    }
+    // ✏️❌ は理由を選んでから「記録する」
+    const why = card.querySelector(".rwhy");
+    why.hidden = false;
+    why.dataset.mode = act;
+    const sel = why.querySelector(".rwhy-sel");
+    sel.value = act === "edited" ? "tone" : (x.category === "C" ? "category" : "");
+    sel.focus();
+  });
+  el.querySelectorAll("[data-rsubmit]").forEach(b => b.onclick = () => {
+    const x = find(b.dataset.rsubmit);
+    if (!x) return;
+    const card = b.closest("[data-rcard]");
+    const why = card.querySelector(".rwhy");
+    const mode = why.dataset.mode;
+    const wrongType = why.querySelector(".rwhy-sel").value;
+    if (!wrongType){ alert("理由を選んでください。"); return; }
+    const comment = why.querySelector(".rwhy-memo").value;
+    const box = card.querySelector("textarea.msgbox");
+    if (mode === "edited"){
+      const text = box ? box.value : "";
+      if (!text.trim()){ alert("文面が空です。"); return; }
+      if (!x.scoreOnly) copyAndOpen_(x, text);
+      return sendReplyDecision_(x, "edited", { finalText: text, wrongType, comment }, b);
+    }
+    return sendReplyDecision_(x, "wrong", { wrongType, comment }, b);
+  });
+}
+
 /* =========================================================
    その他タブ
    ========================================================= */
@@ -1204,6 +1390,10 @@ async function refresh(){
   lastFetchAt = Date.now();
   const res = await RocoApi.load();
   if (res.data) { DATA = res.data; }
+  if (RocoApi.hasReplyKey()){
+    const rr = await RocoApi.loadReplies();
+    REPLIES = rr.ok ? { items: rr.items, score: rr.score, error: "" } : Object.assign({}, REPLIES, { error: rr.error });
+  }
 
   if (res.ok){
     lastOkFetchAt = Date.now();

@@ -32,8 +32,13 @@
     catch (e) { return null; }
   };
 
+  // 💬ゲスト返信の鍵（2026-10-12 Phase 2）。家族の合言葉とは別で、たかさんの端末にだけ入れる。
+  // ゲストの原文が見えるので、家族に配るリンクには入れない（窓口GASの showReplyKey() が出す #rk=…）
+  const K_RKEY = "app:replyKey";
+
   let _key = rawGet(K_KEY) || "";
   let _api = rawGet(K_API) || "";
+  let _rkey = rawGet(K_RKEY) || "";
 
   /** 配布リンクの #k=… / #api=… を読んで覚える。URLからは消す（履歴に残さない） */
   function adoptFromHash() {
@@ -43,6 +48,7 @@
     let took = false;
     if (p.get("k")) { setKey(p.get("k").trim()); took = true; }
     if (p.get("api")) { setApiUrl(p.get("api").trim()); took = true; }
+    if (p.get("rk")) { setReplyKey(p.get("rk").trim()); took = true; }
     if (took) history.replaceState(null, "", location.pathname + location.search);
   }
 
@@ -128,7 +134,47 @@
     }
   }
 
+  function setReplyKey(k) { _rkey = k; Store.set(K_RKEY, k); }
+  function hasReplyKey() { return !!_rkey; }
+
+  /** 💬ゲスト返信のカード（ボタン待ちの行と採点の集計）。鍵が無い端末では呼ばない */
+  async function loadReplies() {
+    if (!_rkey) return { ok: false, error: "no_key" };
+    const url = apiUrl() + "?view=replies&k=" + encodeURIComponent(_rkey) + "&t=" + Date.now();
+    try {
+      const r = await fetch(url, { method: "GET", redirect: "follow" });
+      if (!r.ok) return { ok: false, error: "http_" + r.status };
+      const j = await r.json();
+      if (!j || j.ok !== true) return { ok: false, error: (j && j.error) || "denied" };
+      return { ok: true, items: Array.isArray(j.items) ? j.items : [], score: j.score || null };
+    } catch (e) {
+      return { ok: false, error: "offline" };
+    }
+  }
+
+  /**
+   * 💬ゲスト返信のボタン1回ぶんを記録する。
+   * @param {{id:string, decision:"ok"|"edited"|"wrong"|"handled", finalText?:string, wrongType?:string, comment?:string, by?:string}} item
+   */
+  async function decideReply(item) {
+    if (!_rkey) return { ok: false, error: "no_key" };
+    const body = Object.assign({}, item, { k: _rkey, action: "reply_decide" });
+    try {
+      const r = await fetch(apiUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) return { ok: false, error: "http_" + r.status };
+      try { return await r.json(); }
+      catch (e) { return { ok: false, error: "not_json" }; }
+    } catch (e) {
+      return { ok: false, error: "offline" };
+    }
+  }
+
   adoptFromHash();
 
-  window.RocoApi = { load, cached, setKey, setApiUrl, key, apiUrl, isReady, decide };
+  window.RocoApi = { load, cached, setKey, setApiUrl, key, apiUrl, isReady, decide,
+    setReplyKey, hasReplyKey, loadReplies, decideReply };
 })();
