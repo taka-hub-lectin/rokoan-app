@@ -900,7 +900,7 @@ function unreadCount(){
   //   ＋承認したのに送られていない文面（放っておくとゲストに何も届かない）
   return visibleNotices().filter(n => !READ.has(String(n.id)) && !isDoneNotice(n)).length
     + pendingQueueItems().length + stuckQueueItems().length
-    + REPLIES.items.filter(x => !x.scoreOnly).length;   // ゲストへの返信待ち（過去分の採点は数えない）
+    + REPLIES.items.filter(x => !x.scoreOnly && x.category !== "N").length;   // ゲストへの返信待ち（過去分・返事不要は数えない）
 }
 function updateBadge(){
   const b = document.getElementById("nbadge");
@@ -1144,7 +1144,13 @@ const R_CAT = {
   A: { label:"A そのまま答えられる", cls:"done" },
   B: { label:"B 確認が要る", cls:"wait" },
   C: { label:"C 緊急", cls:"err" },
+  N: { label:"N 返事不要", cls:"no" },   // 家族は「着きました」「OK」お礼だけ には文字で返していない（10/12）
 };
+// 返信案の名乗り（{{名乗り}}）は、このスマホから送るアカウントで入れ替える（10/12 たかさん「どのアカウントで返事するか次第」）
+const SENDERS = { Taka:"ロコ庵補助ホストのTaka", Manami:"ロコ庵のManami", Minami:"ロコ庵のMinami" };
+let SENDER = "Taka";   // たかさんのスマホ＝Takaのアカウント（10/12 確認）
+async function loadSender_(){ try { const v = await Store.get("app:sender"); if (SENDERS[v]) SENDER = v; } catch (e) {} }
+const named_ = (t) => String(t || "").split("{{名乗り}}").join(SENDERS[SENDER] || SENDERS.Taka);
 // ❌✏️の理由。「重大」は Phase 3 の関所（重大0件）に数える（10/9 決定の定義）
 const R_WHY = [
   ["tone",      "言い回しを直した（軽微）"],
@@ -1214,10 +1220,21 @@ function replyCardHtml_(x){
         <button data-ract="wrong" data-rid="${esc(id)}">❌ 緊急ではない</button>
       </div>${why}</div>`;
   }
+  if (x.category === "N"){
+    return `<div class="card ntc ${esc(fac.cls)}" data-rcard="${esc(id)}">
+      ${head}
+      <div class="n-body">返事は要らないと判断しました（家族はこの種のメッセージに❤️だけか、対面で対応しています）。</div>
+      ${x.reason ? `<div class="n-body" style="color:var(--muted)">理由：${esc(String(x.reason))}</div>` : ""}
+      <div class="n-act">
+        <button class="primary" data-ract="ok" data-rid="${esc(id)}">👍 そのとおり</button>
+        <button class="danger" data-ract="wrong" data-rid="${esc(id)}">❌ 返事が要る</button>
+        ${x.scoreOnly ? "" : `<a href="${esc(airbnbUrl_(x))}" target="_blank" rel="noopener">🔗 Airbnbで❤️する</a>`}
+      </div>${why}</div>`;
+  }
   return `<div class="card ntc ${esc(fac.cls)}${x.scoreOnly ? "" : " unread"}" data-rcard="${esc(id)}">
       ${head}
-      <div class="n-body" style="color:var(--muted);margin-top:8px">返信案（直してから ✏️ を押せます）</div>
-      <textarea class="msgbox" id="${box}">${esc(String(x.draft || ""))}</textarea>
+      <div class="n-body" style="color:var(--muted);margin-top:8px">返信案（${esc(SENDER)}として・直してから ✏️ を押せます）</div>
+      <textarea class="msgbox" id="${box}">${esc(named_(x.draft))}</textarea>
       ${x.reason ? `<div class="n-body" style="color:var(--muted)">理由：${esc(String(x.reason))}</div>` : ""}
       <div class="n-act">
         <button class="primary" data-ract="ok" data-rid="${esc(id)}">👍 そのまま</button>
@@ -1266,14 +1283,16 @@ function bindReplyHandlers_(el){
     const card = b.closest("[data-rcard]");
     const box = card.querySelector("textarea.msgbox");
     if (act === "ok"){
-      if (!x.scoreOnly) copyAndOpen_(x, String(x.draft || ""));
-      return sendReplyDecision_(x, "ok", null, b);
+      if (x.category === "N") return sendReplyDecision_(x, "ok", null, b);   // 返事不要に同意＝送る文面なし
+      const text = named_(x.draft);
+      if (!x.scoreOnly) copyAndOpen_(x, text);
+      return sendReplyDecision_(x, "ok", { finalText: text }, b);
     }
     if (act === "handled"){
       if (!confirm("Airbnbでの対応は済みましたか？「対応済み」にします。")) return;
       return sendReplyDecision_(x, "handled", null, b);
     }
-    if (act === "edited" && box && box.value.trim() === String(x.draft || "").trim()){
+    if (act === "edited" && box && box.value.trim() === named_(x.draft).trim()){
       alert("文面が変わっていません。そのままなら 👍 を押してください。");
       return;
     }
@@ -1282,7 +1301,7 @@ function bindReplyHandlers_(el){
     why.hidden = false;
     why.dataset.mode = act;
     const sel = why.querySelector(".rwhy-sel");
-    sel.value = act === "edited" ? "tone" : (x.category === "C" ? "category" : "");
+    sel.value = act === "edited" ? "tone" : (x.category === "C" || x.category === "N" ? "category" : "");
     sel.focus();
   });
   el.querySelectorAll("[data-rsubmit]").forEach(b => b.onclick = () => {
@@ -1351,7 +1370,14 @@ function renderEtc(){
  */
 function replyKeyHtml_(){
   const on = RocoApi.hasReplyKey();
-  return `<div class="sec">💬 返信用の鍵</div>
+  const sender = !on ? "" : `<div class="sec">💬 このスマホから送るアカウント</div>
+    <div class="card" style="padding:12px">
+      <div class="n-body" style="color:var(--muted)">返信案の名乗り（「はじめまして、〇〇です」）がこの名前になります。</div>
+      <select id="sender-sel" style="width:100%;margin-top:8px;padding:9px;border-radius:8px">
+        ${Object.keys(SENDERS).map(k => `<option value="${k}"${k === SENDER ? " selected" : ""}>${esc(SENDERS[k])}</option>`).join("")}
+      </select>
+    </div>`;
+  return sender + `<div class="sec">💬 返信用の鍵</div>
     <div class="card" style="padding:12px">
       <div class="n-body" style="color:var(--muted)">${on
         ? "この端末には返信用の鍵が入っています。🔔に「💬 ゲスト返信」が出ます。"
@@ -1366,6 +1392,8 @@ function replyKeyHtml_(){
 }
 
 function bindReplyKey_(){
+  const ss = document.getElementById("sender-sel");
+  if (ss) ss.onchange = async () => { SENDER = ss.value; await Store.set("app:sender", SENDER); renderNotices(); };
   const save = document.getElementById("rkey-save");
   if (save) save.onclick = async () => {
     const v = (document.getElementById("rkey-in").value || "").trim();
@@ -1504,6 +1532,7 @@ if ("serviceWorker" in navigator) {
 // 前回の内容があれば先に出す（通信を待たせない）。既読の記録を読んでから描く
 (async () => {
   await loadRead();
+  await loadSender_();
   const c = RocoApi.cached();
   if (c) { DATA = Object.assign({ notices:[] }, c); renderAll(); }
   refresh();
