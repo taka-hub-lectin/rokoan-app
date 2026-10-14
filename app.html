@@ -732,7 +732,7 @@ function renderList(){
    名簿GASが「📅アプリ用_お知らせ」に1件1行で書いたものを、新しい順に出す。
    既読は端末ごと（家族で共有しない）。バッジ＝未読の数。
    ========================================================= */
-const KIND_ICON = { ng:"⏳", sc:"⚠️", park:"🚗", fail:"🛑", test:"🔔", info:"ℹ️", roster:"📋", approve:"📤" };
+const KIND_ICON = { ng:"⏳", sc:"⚠️", park:"🚗", fail:"🛑", test:"🔔", info:"ℹ️", roster:"📋", approve:"📤", quota:"📅" };
 
 // 📤送信の承認カード用（送信キュー.js が「📤送信キュー」に書く状態文字列と対応）
 const QSTATUS_PILL = {
@@ -834,7 +834,66 @@ function noticeSummaryHtml_(pend, list){
   if (stuck) parts.push("🛑 送信が止まっている " + stuck);
   parts.push("🔔 未対応 " + open);
   const sent = `📨 ゲストへの自動送信：今月 ${by[ym] || 0}件（先月 ${by[pm] || 0}件）`;
-  return `<div class="banner info" style="display:flex;flex-wrap:wrap;gap:4px 14px"><span>${esc(parts.join("　"))}</span><span>${esc(sent)}</span></div>`;
+  return `<div class="banner info" style="display:flex;flex-wrap:wrap;gap:4px 14px"><span>${esc(parts.join("　"))}</span><span>${esc(sent)}</span></div>`
+       + quotaBannerHtml_();
+}
+
+/** 残り枠の段階（名簿GAS 180日枠.js の QUOTA_WARN / QUOTA_ALERT と同じ数字） */
+const QUOTA_WARN = 30, QUOTA_ALERT = 10;
+
+/**
+ * 📅 今年度の残り枠（住宅宿泊事業法の180日上限）。
+ * 数えているのは名簿GAS（180日枠.js）で、Airbnbの確定予約＋自社予約が元。
+ * **ここでは数え直さない**（📅アプリ用の行は名簿ベースなので、未登録の予約が落ちて多く見える）。
+ * 行が無ければ何も出さない＝「0泊」と嘘をつかない。
+ */
+function quotaBannerHtml_(){
+  const n = (DATA.notes || []).find(x => x.kind === "quota");
+  if (!n) return "";
+  let q = null;
+  try { q = JSON.parse(String(n.note || "")); } catch(e){ q = null; }
+  const limit = Number((q && q.limit) || n.nights || 180);
+  const num = v => (v === "" || v === null || v === undefined || isNaN(Number(v))) ? null : Number(v);
+  const facs = [
+    { label:"🏠 母屋",  v: (q && q.main)   || { remain: num(n.main) } },
+    { label:"🌿 離れ", v: (q && q.hanare) || { remain: num(n.hanare) } },
+  ].filter(f => f.v && f.v.remain !== null && f.v.remain !== undefined);
+  if (!facs.length) return "";
+
+  const lvOf = v => v.level || (v.remain < 0 ? "over" : v.remain <= QUOTA_ALERT ? "alert"
+                             : v.remain <= QUOTA_WARN ? "warn" : "ok");
+  const rank = { ok:0, warn:1, alert:2, over:3 };
+  let worst = "ok";
+  const parts = facs.map(f => {
+    const v = f.v, lv = lvOf(v);
+    if (rank[lv] > rank[worst]) worst = lv;
+    const icon = (lv === "over" || lv === "alert") ? "🛑 " : (lv === "warn") ? "⚠️ " : "";
+    const used = (v.used === undefined) ? "" : `（使用 ${v.used}/${limit}）`;
+    return v.remain < 0
+      ? `${icon}${f.label} ${Math.abs(v.remain)}泊 超過${used}`
+      : `${icon}${f.label} 残り${v.remain}泊${used}`;
+  });
+
+  // 期間は「4/1〜3/31」だけ出す（年は年度の始まりが分かれば足りる）
+  const md = s => { const d = parseYmd(String(s || "").slice(0,10)); return d ? `${d.getMonth()+1}/${d.getDate()}` : ""; };
+  const span = (q && q.fyStart) ? `${md(q.fyStart)}〜${md(q.fyEnd)}` : `${md(n.start)}〜${md(n.end)}`;
+  let head = `📅 今年度の残り枠（${span}）`;
+
+  // 計算が古いときは「いつ時点か」を出す（Gmailが読めないと前回の数字が残る作り）
+  const extra = [];
+  const asof = q && q.asof ? parseYmd(String(q.asof).slice(0,10)) : null;
+  if (asof){
+    const t = jstToday();
+    const days = Math.round((new Date(t.y, t.m - 1, t.d) - asof) / 86400000);
+    if (days >= 2) extra.push(`${String(q.asof).slice(0,10)} 時点の計算`);
+  }
+  if (q && q.unknown) extra.push(`⚠️ どの棟か判定できない泊が${q.unknown}日`);
+
+  const cls = (worst === "over" || worst === "alert") ? "warn" : (worst === "warn") ? "wait" : "info";
+  return `<div class="banner ${cls}" style="display:flex;flex-wrap:wrap;gap:4px 14px">`
+       + `<span>${esc(head)}</span><span>${esc(parts.join("　"))}</span>`
+       + (extra.length ? `<span style="opacity:.8">${esc(extra.join("　"))}</span>` : "")
+       + `</div>`;
 }
 
 /** 端末に保存した表示名（承認記録用。本人確認ではない＝既読と同じ「端末ごと」の弱い記録） */
